@@ -60,6 +60,12 @@ require_config MOZ_LIBCLANG_PATH /usr/lib/llvm21/lib
 reject_config_key MOZ_X11
 reject_config_key MOZ_ENABLE_DBUS
 reject_config_key NECKO_WIFI
+reject_config_key ENABLE_WEBDRIVER
+reject_config_key ENABLE_SYSTEM_EXTENSION_DIRS
+reject_config_key MOZ_AUTH_EXTENSION
+reject_config_key MOZ_GECKO_PROFILER
+reject_config_key MOZ_UNIVERSALCHARDET
+reject_config_key MOZ_ZIPWRITER
 reject_config_key MOZ_WEBRTC
 reject_config_key MOZ_ALSA
 reject_config_key MOZ_PULSEAUDIO
