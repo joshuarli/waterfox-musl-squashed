@@ -25,8 +25,9 @@ commands:
   package           Reserved for the package tranche.
   check             Reserved for static dependency checks.
   smoke-headless    Reserved for Docker headless Wayland/cage smoke.
-  qemu-image        Reserved for QEMU rootfs/image assembly.
-  qemu-run          Reserved for QEMU visible kiosk proof.
+  kiosk-compositor  Build the custom DRM/libinput cage compositor.
+  qemu-image        Assemble the QEMU Alpine aarch64 kiosk rootfs image.
+  qemu-run          Boot the QEMU visible kiosk proof.
 EOF
 }
 
@@ -37,6 +38,7 @@ ensure_cache_dirs() {
     "$cache_dir/build" \
     "$cache_dir/build-deps" \
     "$cache_dir/test-compositor" \
+    "$cache_dir/kiosk-compositor" \
     "$cache_dir/sysroot" \
     "$cache_dir/mozbuild" \
     "$cache_dir/sccache" \
@@ -68,6 +70,7 @@ run_in_image() {
     --volume "$cache_dir:/cache" \
     --volume "$cache_dir/build-deps:/opt/wfx/build-deps" \
     --volume "$cache_dir/test-compositor:/opt/wfx/test-compositor" \
+    --volume "$cache_dir/kiosk-compositor:/opt/wfx/kiosk-compositor" \
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
@@ -93,6 +96,7 @@ run_shell() {
     --volume "$cache_dir:/cache" \
     --volume "$cache_dir/build-deps:/opt/wfx/build-deps" \
     --volume "$cache_dir/test-compositor:/opt/wfx/test-compositor" \
+    --volume "$cache_dir/kiosk-compositor:/opt/wfx/kiosk-compositor" \
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
@@ -221,8 +225,17 @@ case "$command" in
   smoke-headless)
     run_in_image sh -euc '/work/docker/waterfox-musl/build-test-compositor build && /work/docker/waterfox-musl/smoke-headless'
     ;;
-  qemu-image|qemu-run)
-    reserved
+  kiosk-compositor)
+    run_in_image /work/docker/waterfox-musl/build-kiosk-compositor build
+    ;;
+  qemu-image)
+    run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
+    ;;
+  qemu-run)
+    if [ ! -f "$cache_dir/qemu/waterfox-kiosk.ext4" ]; then
+      run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
+    fi
+    "$script_dir/qemu-run"
     ;;
   -h|--help|help)
     usage

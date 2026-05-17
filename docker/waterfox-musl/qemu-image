@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cache=${WFX_CACHE:-/cache}
+stage=${WFX_STAGE_ROOT:-$cache/dist/stage1-root}
+qemu_dir=$cache/qemu
+rootfs=$qemu_dir/rootfs
+image=$qemu_dir/waterfox-kiosk.ext4
+kernel=$qemu_dir/vmlinuz-virt
+initramfs=$qemu_dir/initramfs-virt
+compositor=${WFX_KIOSK_COMPOSITOR:-/opt/wfx/kiosk-compositor}
+image_mb=${WFX_QEMU_IMAGE_MB:-2048}
+
+fail() {
+  printf 'wfx qemu image failed: %s\n' "$*" >&2
+  exit 1
+}
+
+require_path() {
+  [ -e "$1" ] || fail "missing $1"
+}
+
+install_rootfs_packages() {
+  apk update --cache-dir /var/cache/apk >/dev/null
+  apk add --cache-dir /var/cache/apk --no-progress genext2fs mkinitfs >/dev/null
+  rm -rf "$rootfs"
+  mkdir -p "$rootfs"
+  apk --root "$rootfs" \
+    --arch aarch64 \
+    --initdb \
+    --keys-dir /etc/apk/keys \
+    --repositories-file /etc/apk/repositories \
+    --cache-dir /var/cache/apk \
+    add --no-progress --no-scripts \
+      alpine-base \
+      ca-certificates \
+      eudev \
+      eudev-libs \
+      font-dejavu \
+      fontconfig \
+      hwdata \
+      libdisplay-info \
+      libdrm \
+      libevdev \
+      libinput \
+      libseat \
+      libxkbcommon \
+      linux-firmware-none \
+      linux-virt \
+      mtdev \
+      openrc \
+      pixman \
+      seatd \
+      wayland >/dev/null
+}
+
+install_payloads() {
+  require_path "$stage/opt/waterfox"
+  require_path "$stage/opt/wfx/sysroot"
+  require_path "$stage/usr/bin/waterfox"
+  require_path "$compositor/bin/cage"
+
+  mkdir -p "$rootfs/opt" "$rootfs/usr/bin"
+  rm -rf "$rootfs/opt/waterfox" "$rootfs/opt/wfx" "$rootfs/usr/bin/waterfox"
+  cp -a "$stage/opt/waterfox" "$rootfs/opt/waterfox"
+  mkdir -p "$rootfs/opt/wfx"
+  cp -a "$stage/opt/wfx/sysroot" "$rootfs/opt/wfx/sysroot"
+  cp -a "$compositor" "$rootfs/opt/wfx/kiosk-compositor"
+  cp -a "$stage/usr/bin/waterfox" "$rootfs/usr/bin/waterfox"
+}
+
+install_kiosk_init() {
+  mkdir -p "$rootfs/usr/local/bin" "$rootfs/var/log"
+  cat > "$rootfs/usr/local/bin/wfx-kiosk-init" <<'EOF'
+#!/bin/sh
+set -eu
+
+mount -t proc proc /proc || true
+mount -t sysfs sysfs /sys || true
+mount -t devtmpfs devtmpfs /dev || true
+mkdir -p /dev/pts /run /tmp /var/log
+mount -t devpts devpts /dev/pts || true
+mount -t tmpfs tmpfs /run || true
+chmod 1777 /tmp
+
+export PATH=/opt/wfx/kiosk-compositor/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LD_LIBRARY_PATH=/opt/wfx/kiosk-compositor/lib:/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export XDG_RUNTIME_DIR=/run/user/0
+export WAYLAND_DISPLAY=wayland-0
+export MOZ_ENABLE_WAYLAND=1
+export GDK_BACKEND=wayland
+export NO_AT_BRIDGE=1
+export MOZ_WEBRENDER_SOFTWARE=1
+export LIBGL_ALWAYS_SOFTWARE=1
+export MOZ_DISABLE_AUTO_SAFE_MODE=1
+export MOZ_CRASHREPORTER_DISABLE=1
+export WLR_BACKENDS=drm
+export WLR_RENDERER=pixman
+export WLR_NO_HARDWARE_CURSORS=1
+export SEATD_SOCK=/run/seatd.sock
+
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+seatd -g root -n 1 -s "$SEATD_SOCK" -l debug >/var/log/seatd.log 2>&1 &
+sleep 1
+
+exec cage -- /usr/bin/waterfox about:blank >/var/log/waterfox-kiosk.log 2>&1
+EOF
+  chmod 0755 "$rootfs/usr/local/bin/wfx-kiosk-init"
+}
+
+create_initramfs() {
+  local kver
+  kver=$(basename "$(find "$rootfs/lib/modules" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)")
+  if [ -z "$kver" ]; then
+    fail "could not determine linux-virt kernel version"
+  fi
+  mkinitfs \
+    -b "$rootfs" \
+    -F "base virtio ext2 ext4" \
+    -o "$rootfs/boot/initramfs-virt" \
+    "$kver"
+}
+
+create_image() {
+  local rootfs_kb image_kb
+  rm -f "$rootfs/bin/bbsuid"
+  rootfs_kb=$(du -sk "$rootfs" 2>/dev/null | awk '{ print $1 }' || :)
+  if [ -z "$rootfs_kb" ]; then
+    fail "could not size rootfs"
+  fi
+  image_kb=$((image_mb * 1024))
+  if [ "$rootfs_kb" -ge "$image_kb" ]; then
+    fail "rootfs is ${rootfs_kb}KiB, larger than WFX_QEMU_IMAGE_MB=$image_mb"
+  fi
+  rm -f "$image"
+  find "$rootfs/lib/modules" -type f \( \
+    -name 'xt_RATEEST.ko.gz' -o \
+    -name 'xt_DSCP.ko.gz' -o \
+    -name 'xt_TCPMSS.ko.gz' -o \
+    -name 'xt_HL.ko.gz' \) -delete 2>/dev/null || true
+  genext2fs -q -B 1024 -b "$image_kb" -L WFXROOT -d "$rootfs" "$image"
+  cp -a "$rootfs/boot/vmlinuz-virt" "$kernel"
+  if [ -f "$rootfs/boot/initramfs-virt" ]; then
+    cp -a "$rootfs/boot/initramfs-virt" "$initramfs"
+  else
+    rm -f "$initramfs"
+  fi
+}
+
+write_manifest() {
+  {
+    printf 'image=%s\n' "$image"
+    printf 'kernel=%s\n' "$kernel"
+    printf 'initramfs=%s\n' "$initramfs"
+    printf 'rootfs=%s\n' "$rootfs"
+    printf 'image_mb=%s\n' "$image_mb"
+    printf 'created_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    printf 'waterfox_stage=%s\n' "$stage"
+    printf 'compositor=%s\n' "$compositor"
+  } > "$qemu_dir/waterfox-kiosk.manifest.txt"
+}
+
+build_image() {
+  mkdir -p "$qemu_dir"
+  install_rootfs_packages
+  install_payloads
+  install_kiosk_init
+  create_initramfs
+  create_image
+  write_manifest
+  printf 'Created QEMU image: %s\n' "$image"
+}
+
+case "${1:-build}" in
+  build)
+    build_image
+    ;;
+  *)
+    printf 'usage: %s [build]\n' "$0" >&2
+    exit 2
+    ;;
+esac

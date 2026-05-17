@@ -100,13 +100,17 @@ cage_pid=$!
 
 surface_seen=0
 for _ in $(seq 1 60); do
-  if ! kill -0 "$cage_pid" 2>/dev/null; then
-    wait "$cage_pid" || true
-    fail "cage exited before Waterfox created a Wayland toplevel"
-  fi
   if grep -Eq 'xdg_toplevel|get_toplevel' "$log"; then
     surface_seen=1
     break
+  fi
+  if ! kill -0 "$cage_pid" 2>/dev/null; then
+    wait "$cage_pid" || true
+    if grep -Eq 'xdg_toplevel|get_toplevel' "$log"; then
+      fail "cage exited after Waterfox created a Wayland toplevel"
+    else
+      fail "cage exited before Waterfox created a Wayland toplevel"
+    fi
   fi
   sleep 1
 done

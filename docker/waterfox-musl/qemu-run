@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
+qemu_dir=$cache_dir/qemu
+image=${WFX_QEMU_IMAGE:-$qemu_dir/waterfox-kiosk.ext4}
+kernel=${WFX_QEMU_KERNEL:-$qemu_dir/vmlinuz-virt}
+initramfs=${WFX_QEMU_INITRAMFS:-$qemu_dir/initramfs-virt}
+qemu=${WFX_QEMU_SYSTEM:-qemu-system-aarch64}
+accel=${WFX_QEMU_ACCEL:-hvf}
+memory=${WFX_QEMU_MEMORY:-4096}
+smp=${WFX_QEMU_SMP:-4}
+display=${WFX_QEMU_DISPLAY:-cocoa}
+
+fail() {
+  printf 'wfx qemu run failed: %s\n' "$*" >&2
+  exit 1
+}
+
+[ -f "$image" ] || fail "missing $image; run docker/waterfox-musl/wfx-musl qemu-image"
+[ -f "$kernel" ] || fail "missing $kernel; run docker/waterfox-musl/wfx-musl qemu-image"
+command -v "$qemu" >/dev/null 2>&1 || fail "missing $qemu"
+
+args=(
+  -machine "virt,accel=$accel"
+  -cpu host
+  -m "$memory"
+  -smp "$smp"
+  -kernel "$kernel"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext2 init=/usr/local/bin/wfx-kiosk-init loglevel=4"
+  -drive "file=$image,if=virtio,format=raw"
+  -device virtio-gpu-pci
+  -device virtio-keyboard-pci
+  -device virtio-tablet-pci
+  -serial mon:stdio
+  -display "$display"
+)
+
+if [ -f "$initramfs" ]; then
+  args=(-initrd "$initramfs" "${args[@]}")
+fi
+
+exec "$qemu" "${args[@]}"

@@ -191,13 +191,13 @@ Waterfox tree, so image iteration does not upload the browser checkout.
 Last full build command used:
 
 ```sh
-WFX_JOBS=2 WFX_CARGO_JOBS=2 docker/waterfox-musl/wfx-musl build
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl build
 ```
 
-The last completed container build passed the stage 1 client-certificate
-dependency cut, completed a debug Waterfox build with Alpine edge build-time
-dependencies, packaged it, staged the `/opt/waterfox` tree with the custom
-runtime-only `/opt/wfx/sysroot`, and passed the static dependency scan.
+The latest completed container build passed with eight jobs after increasing the
+OrbStack memory limit. It completed a debug Waterfox build with Alpine edge
+build-time dependencies, packaged it, staged the `/opt/waterfox` tree with the
+custom runtime-only `/opt/wfx/sysroot`, and passed the static dependency scan.
 
 The current stage 1 debug artifact is:
 
@@ -228,13 +228,31 @@ that relaxation:
   `LoadIPCClientCertsModule()` return `false` without referencing the removed
   Rust symbol.
 
+Tranche 5 status:
+
+- The custom wlroots/cage headless compositor builds and scans without rejected
+  dependencies.
+- `smoke-headless` passes with the staged debug Waterfox and verifies that an
+  `xdg_toplevel` was created.
+- The smoke manifest is
+  `.wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.headless-smoke.txt`.
+
+Tranche 6 status:
+
+- `kiosk-compositor` builds a custom DRM/libinput wlroots+cage stack with
+  Xwayland, EGL, GLES, Vulkan, and GBM disabled.
+- `qemu-image` assembles an Alpine aarch64 rootfs image at
+  `.wfx-cache/qemu/waterfox-kiosk.ext4`.
+- `qemu-run` is wired for host `qemu-system-aarch64`, but the visible kiosk boot
+  proof has not been run or accepted yet.
+
 Next resume actions:
 
-1. Start Tranche 5: build the separate headless Wayland compositor stack.
-2. Run the packaged debug Waterfox under the headless compositor long enough to
-   create a Wayland surface.
-3. Verify no rejected libraries are loaded at runtime.
-4. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
+1. Rebuild `.wfx-cache/qemu/waterfox-kiosk.ext4` so the QEMU image includes the
+   latest staged debug Waterfox and Tranche 5 fixes.
+2. Boot `.wfx-cache/qemu/waterfox-kiosk.ext4` with `qemu-run` and capture the
+   visible kiosk proof.
+3. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
    or optimized builds until the final packaging profile is reached.
 
 ### Known Relaxations And Followups
