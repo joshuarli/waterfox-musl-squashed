@@ -7,6 +7,8 @@ repo_root=$(cd "$script_dir/../.." && pwd)
 image=${WFX_IMAGE:-waterfox-musl:edge-clang22}
 platform=${WFX_DOCKER_PLATFORM:-linux/arm64}
 cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
+default_mozconfig=/work/docker/waterfox-musl/mozconfig.stage1
+release_mozconfig=/work/docker/waterfox-musl/mozconfig.release
 
 usage() {
   cat <<'EOF'
@@ -24,6 +26,10 @@ commands:
   build             Reserved for the Waterfox build tranche.
   package           Reserved for the package tranche.
   check             Reserved for static dependency checks.
+  waterfox-deps     Verify final staged Waterfox ELF dependencies.
+  configure-release Configure the optimized release build.
+  build-release     Build the optimized release build.
+  package-release   Package the optimized release build.
   smoke-headless    Reserved for Docker headless Wayland/cage smoke.
   kiosk-compositor  Build the custom DRM/libinput cage compositor.
   qemu-image        Assemble the QEMU Alpine aarch64 kiosk rootfs image.
@@ -59,6 +65,8 @@ build_image() {
 }
 
 run_in_image() {
+  local container_mozconfig
+  container_mozconfig=${WFX_MOZCONFIG:-$default_mozconfig}
   ensure_cache_dirs
   if ! docker image inspect "$image" >/dev/null 2>&1; then
     build_image
@@ -74,7 +82,7 @@ run_in_image() {
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
-    --env MOZCONFIG=/work/docker/waterfox-musl/mozconfig.stage1 \
+    --env MOZCONFIG="$container_mozconfig" \
     --env WFX_SKIP_MACH_OPTIONAL=1 \
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
@@ -84,6 +92,8 @@ run_in_image() {
 }
 
 run_shell() {
+  local container_mozconfig
+  container_mozconfig=${WFX_MOZCONFIG:-$default_mozconfig}
   ensure_cache_dirs
   if ! docker image inspect "$image" >/dev/null 2>&1; then
     build_image
@@ -101,13 +111,27 @@ run_shell() {
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
-    --env MOZCONFIG=/work/docker/waterfox-musl/mozconfig.stage1 \
+    --env MOZCONFIG="$container_mozconfig" \
     --env WFX_SKIP_MACH_OPTIONAL=1 \
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
     --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
     "$image" \
     bash
+}
+
+uses_default_qemu_artifacts() {
+  [ -z "${WFX_QEMU_IMAGE+x}" ] &&
+    [ -z "${WFX_QEMU_KERNEL+x}" ] &&
+    [ -z "${WFX_QEMU_INITRAMFS+x}" ]
+}
+
+refresh_qemu_image() {
+  run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
+}
+
+run_release_in_image() {
+  WFX_MOZCONFIG=$release_mozconfig run_in_image "$@"
 }
 
 edge_versions() {
@@ -207,7 +231,10 @@ case "$command" in
     run_in_image /work/docker/waterfox-musl/build-sysroot smoke
     ;;
   check)
-    run_in_image /work/docker/waterfox-musl/build-sysroot scan
+    run_in_image sh -euc '/work/docker/waterfox-musl/build-sysroot scan && if [ -d /cache/dist/stage1-root/opt/waterfox ]; then /work/docker/waterfox-musl/check-waterfox-deps; fi'
+    ;;
+  waterfox-deps)
+    run_in_image /work/docker/waterfox-musl/check-waterfox-deps
     ;;
   configure-check)
     run_in_image /work/docker/waterfox-musl/check-config
@@ -221,6 +248,15 @@ case "$command" in
   package)
     run_in_image sh -euc './mach package && /work/docker/waterfox-musl/package-stage1'
     ;;
+  configure-release)
+    run_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_CONFIG_MODE=release /work/docker/waterfox-musl/check-config'
+    ;;
+  build-release)
+    run_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_CONFIG_MODE=release /work/docker/waterfox-musl/check-config && ./mach build'
+    ;;
+  package-release)
+    run_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_STAGE_ROOT=/cache/dist/release-root WFX_STAGE_ARTIFACT_SUFFIX=release /work/docker/waterfox-musl/package-stage1'
+    ;;
   test-compositor)
     run_in_image /work/docker/waterfox-musl/build-test-compositor build
     ;;
@@ -231,11 +267,11 @@ case "$command" in
     run_in_image /work/docker/waterfox-musl/build-kiosk-compositor build
     ;;
   qemu-image)
-    run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
+    refresh_qemu_image
     ;;
   qemu-run)
-    if [ ! -f "$cache_dir/qemu/waterfox-kiosk.ext4" ]; then
-      run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
+    if uses_default_qemu_artifacts && [ ! -f "$cache_dir/qemu/waterfox-kiosk.ext4" ]; then
+      refresh_qemu_image
     fi
     "$script_dir/qemu-run"
     ;;

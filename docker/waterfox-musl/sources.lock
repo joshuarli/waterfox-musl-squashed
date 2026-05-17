@@ -25,4 +25,4 @@ gtk 3.24.52 https://download.gnome.org/sources/gtk/3.24/gtk-3.24.52.tar.xz 80931
 eglplatform-h egl-registry-3d7796b3721d93976b6bfe536aa97bbc4bce8667 https://raw.githubusercontent.com/KhronosGroup/EGL-Registry/3d7796b3721d93976b6bfe536aa97bbc4bce8667/api/EGL/eglplatform.h 25b5391655effcf363a38fa00c3154f356a3eab3d35dc067847875513cf1e441
 khrplatform-h egl-registry-3d7796b3721d93976b6bfe536aa97bbc4bce8667 https://raw.githubusercontent.com/KhronosGroup/EGL-Registry/3d7796b3721d93976b6bfe536aa97bbc4bce8667/api/KHR/khrplatform.h 7b1e01aaa7ad8f6fc34b5c7bdf79ebf5189bb09e2c4d2e79fc5d350623d11e83
 wlroots 0.20.0 https://gitlab.freedesktop.org/wlroots/wlroots/-/archive/0.20.0/wlroots-0.20.0.tar.gz e2d024916ed3bd011e058e78007655469e8c624fc338a28da610b087793b887b
-cage 0.2.1 https://github.com/cage-kiosk/cage/archive/refs/tags/v0.2.1.tar.gz acab0c83175164a788d7b9f89338cbdebdc4f7197aff6fdc267c32f7181234a9
+cage 0.3.0 https://github.com/cage-kiosk/cage/archive/refs/tags/v0.3.0.tar.gz f32e6885444e365de3bc076d307c20eff59ee42ed0237219eebd3d2fe597e289

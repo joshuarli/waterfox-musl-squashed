@@ -33,7 +33,8 @@ ensure_build_deps() {
     libdisplay-info-dev \
     libdrm-dev \
     libinput-dev \
-    libseat-dev >/dev/null
+    libseat-dev \
+    mesa-dev >/dev/null
 }
 
 source_row() {
@@ -126,8 +127,8 @@ build_wlroots() {
   meson_build_install "$dir" build \
     -Dauto_features=disabled \
     -Dbackends=drm,libinput \
-    -Drenderers=[] \
-    -Dallocators=[] \
+    -Drenderers=gles2 \
+    -Dallocators=gbm \
     -Dxwayland=disabled \
     -Dsession=enabled \
     -Dexamples=false \
@@ -149,7 +150,7 @@ build_cage() {
 
 scan_dependencies() {
   local reject_regex report
-  reject_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libEGL|libGLES|libvulkan|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups'
+  reject_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libvulkan|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups'
   report=$cache/dist/kiosk-compositor.deps.txt
   : > "$report"
   while IFS= read -r -d '' file; do

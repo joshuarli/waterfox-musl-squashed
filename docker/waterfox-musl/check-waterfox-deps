@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=${WFX_REPO_ROOT:-/work}
+cache=${WFX_CACHE:-/cache}
+stage=${WFX_STAGE_ROOT:-$cache/dist/stage1-root}
+readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
+allowed=${WFX_WATERFOX_ALLOWED_NEEDED:-$repo_root/docker/waterfox-musl/waterfox-allowed-needed.txt}
+report=${WFX_WATERFOX_DEPS_REPORT:-$cache/dist/waterfox-final.deps.txt}
+reject_report=${WFX_WATERFOX_DEPS_REJECT_REPORT:-$cache/dist/waterfox-final.rejected-deps.txt}
+needed_report=${WFX_WATERFOX_NEEDED_REPORT:-$cache/dist/waterfox-final.needed.txt}
+deny_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+
+fail() {
+  printf 'wfx waterfox dependency check failed: %s\n' "$*" >&2
+  exit 1
+}
+
+[ -d "$stage/opt/waterfox" ] || fail "missing $stage/opt/waterfox"
+[ -d "$stage/opt/wfx/sysroot" ] || fail "missing $stage/opt/wfx/sysroot"
+[ -f "$allowed" ] || fail "missing allowed dependency list $allowed"
+
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_dir"' EXIT
+actual=$tmp_dir/actual.txt
+expected=$tmp_dir/expected.txt
+unexpected=$tmp_dir/unexpected.txt
+missing=$tmp_dir/missing.txt
+
+sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; s/[[:space:]]//g; p' "$allowed" | sort -u > "$expected"
+: > "$actual"
+: > "$report"
+: > "$reject_report"
+
+elf_count=0
+while IFS= read -r -d '' file; do
+  if ! "$readelf" -h "$file" >/dev/null 2>&1; then
+    continue
+  fi
+
+  elf_count=$((elf_count + 1))
+  rel=${file#"$stage"/}
+  {
+    printf '### %s\n' "$rel"
+    "$readelf" -d "$file" 2>/dev/null | sed -n '/NEEDED/p'
+    printf '\n'
+  } >> "$report"
+
+  "$readelf" -d "$file" 2>/dev/null |
+    sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' >> "$actual"
+
+  if "$readelf" -d "$file" 2>/dev/null | grep -E "$deny_regex" >> "$reject_report"; then
+    printf 'rejected dependency in %s\n' "$rel" >> "$reject_report"
+  fi
+
+  if "$readelf" -d "$file" 2>/dev/null | grep -E '0x000000000800002[345]' >> "$reject_report"; then
+    printf 'rejected Android packed relative relocation tag in %s\n' "$rel" >> "$reject_report"
+  fi
+done < <(find "$stage/opt/waterfox" "$stage/opt/wfx/sysroot" -type f -print0)
+
+[ "$elf_count" -ne 0 ] || fail "no ELF files found in staged artifact"
+
+sort -u "$actual" -o "$actual"
+cp "$actual" "$needed_report"
+comm -23 "$actual" "$expected" > "$unexpected"
+comm -13 "$actual" "$expected" > "$missing"
+
+if [ -s "$unexpected" ]; then
+  {
+    printf 'unexpected NEEDED libraries:\n'
+    sed 's/^/  /' "$unexpected"
+  } >> "$reject_report"
+fi
+
+if [ -s "$missing" ]; then
+  {
+    printf 'missing expected NEEDED libraries:\n'
+    sed 's/^/  /' "$missing"
+  } >> "$reject_report"
+fi
+
+if [ -s "$reject_report" ]; then
+  cat "$reject_report" >&2
+  exit 1
+fi
+
+printf 'elf_count=%s\n' "$elf_count"
+printf 'dependency_scan=%s\n' "$report"
+printf 'needed_libraries=%s\n' "$needed_report"

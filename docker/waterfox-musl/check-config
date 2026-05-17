@@ -5,6 +5,7 @@ objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl}
 config=$objdir/config.status
 log=$objdir/config.log
 compile_commands=$objdir/clangd/compile_commands.json
+mode=${WFX_CONFIG_MODE:-debug}
 
 fail() {
   printf 'wfx config check failed: %s\n' "$*" >&2
@@ -38,13 +39,24 @@ require_file "$config"
 require_file "$log"
 
 require_config MOZ_WAYLAND 1
-require_config MOZ_DEBUG 1
+case "$mode" in
+  debug)
+    require_config MOZ_DEBUG 1
+    reject_config_key MOZ_OPTIMIZE
+    ;;
+  release)
+    reject_config_key MOZ_DEBUG
+    require_config MOZ_OPTIMIZE 1
+    ;;
+  *)
+    fail "unknown WFX_CONFIG_MODE=$mode; expected debug or release"
+    ;;
+esac
 require_config MOZ_AUDIO_BACKENDS_NONE 1
 require_config MOZ_MIMALLOC_REPLACE 1
 require_config WFX_MIMALLOC_PREFIX /opt/wfx/build-deps/mimalloc
 require_config MOZ_LIBCLANG_PATH /usr/lib/llvm21/lib
 
-reject_config_key MOZ_OPTIMIZE
 reject_config_key MOZ_X11
 reject_config_key MOZ_ENABLE_DBUS
 reject_config_key NECKO_WIFI

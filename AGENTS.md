@@ -148,6 +148,12 @@ Package and static dependency scan:
 WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl package
 ```
 
+Rerun the final staged Waterfox ELF dependency check without repackaging:
+
+```sh
+docker/waterfox-musl/wfx-musl waterfox-deps
+```
+
 Headless Wayland smoke:
 
 ```sh
@@ -249,7 +255,10 @@ QEMU-specific issues already solved:
   now defaults runtime wlroots logging to errors while preserving `-D` as the
   explicit debug opt-in.
 - Waterfox glxtest no longer reports missing `libpci` or `libEGL` after adding
-  Mesa EGL/GLES, Gallium, and `pciutils-libs` to the QEMU rootfs.
+  Mesa EGL/GLES, GBM, Gallium, and `pciutils-libs` to the QEMU rootfs.
+- The visible QEMU compositor is now built with wlroots GLES2 rendering and the
+  GBM allocator. The serial smoke needs `WLR_RENDERER_ALLOW_SOFTWARE=1` because
+  QEMU virtio-gpu exposes software EGL in this proof environment.
 - The ORB JavaScript validator is disabled in the kiosk profile to avoid a
   debug-only JSOracle utility-process assertion in this musl runtime.
 - Stage 1 passes `--disable-waterfox-blocker`; the blocker component should not
@@ -261,8 +270,7 @@ Current noisy but nonfatal QEMU output:
 - repeated Gecko debug-build `PuppetWidget without Tab` warnings
 - Waterfox bundled sidebar extension JavaScript errors around
   `handle-autoplay-blocking.js`
-- occasional wlroots DRM `Atomic commit failed: Resource busy` errors during
-  active repaint
+- occasional WebRender texture upload warnings during active repaint
 
 Current QEMU functional followup:
 
@@ -272,10 +280,11 @@ Current QEMU functional followup:
   both event devices and adds the QEMU Virtio Keyboard and QEMU Virtio Tablet.
 - Mouse input works in the Cocoa window.
 - Keyboard input works in the Cocoa window. The later issue was that typed URL
-  bar text did not render back even though Enter submitted the URL; Mesa
-  runtime libraries have since been added, so manually recheck this in Cocoa.
+  bar text did not render back even though Enter submitted the URL; after that,
+  the compositor moved from pixman-only to GLES2/GBM, so manually recheck URL
+  bar repaint and popup/context menus in Cocoa.
 
-If the Cocoa window is blank, investigate the wlroots pixman/DRM-dumb scan-out
+If the Cocoa window is blank, investigate the wlroots GLES2/GBM software-EGL
 path first. The serial log can still show successful surface creation even if
 host-visible scan-out is wrong.
 
@@ -285,9 +294,12 @@ The stage 1 browser runtime must reject X11/XCB/GLX/Xwayland, Vulkan, audio
 stacks, DBus, portals, notification/secret services, speechd, cups, and dynamic
 `libmimalloc.so`.
 
-Static scans are in `package-stage1`, `build-test-compositor`,
-`build-kiosk-compositor`, and `check-config`. Runtime smoke also scans loaded
-libraries from `/proc/*/maps`.
+Static scans are in `check-waterfox-deps`, `package-stage1`,
+`build-test-compositor`, `build-kiosk-compositor`, and `check-config`. The
+final staged Waterfox scan compares every NEEDED entry against
+`docker/waterfox-musl/waterfox-allowed-needed.txt` exactly and still hard-fails
+on X11/XCB/GLX-family dependencies. Runtime smoke also scans loaded libraries
+from `/proc/*/maps`.
 
 Do not use Alpine stock `gtk+3.0` for the final runtime because it pulls X
 libraries. Do not use Alpine stock `cage` for the QEMU proof because its

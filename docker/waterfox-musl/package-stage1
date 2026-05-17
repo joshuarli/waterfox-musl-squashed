@@ -6,11 +6,12 @@ cache=${WFX_CACHE:-/cache}
 objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl}
 sysroot=${WFX_RUNTIME_SYSROOT:-/opt/wfx/sysroot}
 dist=$cache/dist
-stage=$dist/stage1-root
+stage=${WFX_STAGE_ROOT:-$dist/stage1-root}
 package=${WFX_WATERFOX_PACKAGE:-}
 version=${WFX_STAGE1_VERSION:-}
 date_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
+artifact_suffix=${WFX_STAGE_ARTIFACT_SUFFIX:-debug}
 
 mkdir -p "$dist"
 
@@ -49,44 +50,48 @@ exec /opt/waterfox/waterfox "$@"
 EOF
 chmod 0755 "$stage/usr/bin/waterfox"
 
+strip_builtin_sidebar() {
+  local omni json_tmp update_root
+  omni=$stage/opt/waterfox/browser/omni.ja
+  [ -f "$omni" ] || return 0
+
+  update_root=$(mktemp -d)
+  json_tmp=$update_root/chrome/browser/content/browser/built_in_addons.json
+  mkdir -p "$(dirname "$json_tmp")"
+  unzip -p "$omni" chrome/browser/content/browser/built_in_addons.json > "$json_tmp"
+  python3 - "$json_tmp" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path) as f:
+    data = json.load(f)
+
+data["builtins"] = [
+    addon for addon in data.get("builtins", [])
+    if addon.get("addon_id") != "sidebar@waterfox.net"
+]
+
+with open(path, "w") as f:
+    json.dump(data, f, separators=(",", ":"))
+PY
+  (cd "$update_root" && zip -q -u "$omni" chrome/browser/content/browser/built_in_addons.json)
+  rm -rf "$update_root"
+}
+
+strip_builtin_sidebar
+
 scan_report=$dist/$version.deps.txt
 reject_report=$dist/$version.rejected-deps.txt
+needed_report=$dist/$version.needed.txt
 manifest=$dist/$version.manifest.txt
-artifact=$dist/$version.stage1-debug.tar.xz
-reject_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
-
-: > "$scan_report"
-: > "$reject_report"
-elf_count=0
-
-while IFS= read -r -d '' file; do
-  if ! "$readelf" -h "$file" >/dev/null 2>&1; then
-    continue
-  fi
-  elf_count=$((elf_count + 1))
-  rel=${file#"$stage"/}
-  {
-    printf '### %s\n' "$rel"
-    "$readelf" -d "$file" 2>/dev/null | sed -n '/NEEDED/p'
-    printf '\n'
-  } >> "$scan_report"
-  if "$readelf" -d "$file" 2>/dev/null | grep -E "$reject_regex" >> "$reject_report"; then
-    printf 'rejected dependency in %s\n' "$rel" >> "$reject_report"
-  fi
-  if "$readelf" -d "$file" 2>/dev/null | grep -E '0x000000000800002[345]' >> "$reject_report"; then
-    printf 'rejected Android packed relative relocation tag in %s\n' "$rel" >> "$reject_report"
-  fi
-done < <(find "$stage/opt/waterfox" "$stage/opt/wfx/sysroot" -type f -print0)
-
-if [ "$elf_count" -eq 0 ]; then
-  printf 'no ELF files found in staged artifact\n' >&2
-  exit 1
-fi
-
-if [ -s "$reject_report" ]; then
-  cat "$reject_report" >&2
-  exit 1
-fi
+artifact=${WFX_STAGE_ARTIFACT:-$dist/$version.stage1-$artifact_suffix.tar.xz}
+dep_summary=$(WFX_STAGE_ROOT="$stage" \
+  WFX_WATERFOX_DEPS_REPORT="$scan_report" \
+  WFX_WATERFOX_DEPS_REJECT_REPORT="$reject_report" \
+  WFX_WATERFOX_NEEDED_REPORT="$needed_report" \
+  "$repo_root/docker/waterfox-musl/check-waterfox-deps")
+elf_count=$(printf '%s\n' "$dep_summary" | awk -F= '$1 == "elf_count" { print $2 }')
 
 tar -C "$stage" -cJf "$artifact" opt usr
 
@@ -105,6 +110,7 @@ tar -C "$stage" -cJf "$artifact" opt usr
   printf 'mozconfig=%s\n' "$MOZCONFIG"
   printf 'elf_count=%s\n' "$elf_count"
   printf 'dependency_scan=%s\n' "$scan_report"
+  printf 'needed_libraries=%s\n' "$needed_report"
   printf 'rejected_dependency_scan=%s\n' "$reject_report"
   printf '\n[mozconfig]\n'
   cat "$MOZCONFIG"

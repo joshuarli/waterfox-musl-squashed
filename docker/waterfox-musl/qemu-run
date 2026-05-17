@@ -8,40 +8,122 @@ qemu_dir=$cache_dir/qemu
 image=${WFX_QEMU_IMAGE:-$qemu_dir/waterfox-kiosk.ext4}
 kernel=${WFX_QEMU_KERNEL:-$qemu_dir/vmlinuz-virt}
 initramfs=${WFX_QEMU_INITRAMFS:-$qemu_dir/initramfs-virt}
+manifest=$qemu_dir/waterfox-kiosk.manifest.txt
 qemu=${WFX_QEMU_SYSTEM:-qemu-system-aarch64}
 accel=${WFX_QEMU_ACCEL:-hvf}
+cpu=${WFX_QEMU_CPU:-}
 memory=${WFX_QEMU_MEMORY:-4096}
 smp=${WFX_QEMU_SMP:-4}
-display=${WFX_QEMU_DISPLAY:-cocoa}
+display=${WFX_QEMU_DISPLAY:-cocoa,zoom-to-fit=on,show-cursor=on}
 serial=${WFX_QEMU_SERIAL:-stdio}
 monitor=${WFX_QEMU_MONITOR:-none}
 input=${WFX_QEMU_INPUT:-virtio}
 width=${WFX_QEMU_WIDTH:-1600}
 height=${WFX_QEMU_HEIGHT:-1000}
 network=${WFX_QEMU_NETWORK:-user}
+gpu=${WFX_QEMU_GPU:-virtio}
+snapshot=${WFX_QEMU_SNAPSHOT:-on}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
   exit 1
 }
 
+uses_default_artifacts() {
+  [ -z "${WFX_QEMU_IMAGE+x}" ] &&
+    [ -z "${WFX_QEMU_KERNEL+x}" ] &&
+    [ -z "${WFX_QEMU_INITRAMFS+x}" ]
+}
+
+default_image_is_current() {
+  [ -f "$image" ] || return 1
+  [ -f "$kernel" ] || return 1
+  [ -f "$manifest" ] || return 1
+  grep -qx 'qemu_image_version=2' "$manifest" || return 1
+}
+
+if uses_default_artifacts && ! default_image_is_current; then
+  "$script_dir/wfx-musl" qemu-image
+fi
+
 [ -f "$image" ] || fail "missing $image; run docker/waterfox-musl/wfx-musl qemu-image"
 [ -f "$kernel" ] || fail "missing $kernel; run docker/waterfox-musl/wfx-musl qemu-image"
 command -v "$qemu" >/dev/null 2>&1 || fail "missing $qemu"
 
+case "$snapshot" in
+  on|off)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_SNAPSHOT=$snapshot; expected on or off"
+    ;;
+esac
+
+if [ -z "$cpu" ]; then
+  case "$accel" in
+    hvf)
+      cpu=host
+      ;;
+    tcg)
+      cpu=max
+      ;;
+    *)
+      cpu=host
+      ;;
+  esac
+fi
+
+if [ "$display" = cocoa ]; then
+  display=cocoa,zoom-to-fit=on,show-cursor=on
+fi
+
+gcd() {
+  local a=$1 b=$2 t
+  while [ "$b" -ne 0 ]; do
+    t=$((a % b))
+    a=$b
+    b=$t
+  done
+  printf '%s\n' "$a"
+}
+
+if [ "$gpu" = bochs ] && [ "$accel" = hvf ]; then
+  page_size=$(getconf PAGESIZE 2>/dev/null || printf '4096')
+  framebuffer_stride=$((width * 4))
+  if [ $(((framebuffer_stride * height) % page_size)) -ne 0 ]; then
+    divisor=$(gcd "$framebuffer_stride" "$page_size")
+    height_step=$((page_size / divisor))
+    aligned_height=$((((height + height_step - 1) / height_step) * height_step))
+    if [ -n "${WFX_QEMU_HEIGHT+x}" ]; then
+      fail "WFX_QEMU_GPU=bochs with WFX_QEMU_ACCEL=hvf requires width*height*4 to be page-aligned; try WFX_QEMU_HEIGHT=$aligned_height"
+    fi
+    height=$aligned_height
+  fi
+fi
+
 args=(
   -machine "virt,accel=$accel"
-  -cpu host
+  -cpu "$cpu"
   -m "$memory"
   -smp "$smp"
   -kernel "$kernel"
-  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext2 init=/usr/local/bin/wfx-kiosk-init loglevel=4"
-  -drive "file=$image,if=virtio,format=raw"
-  -device "virtio-gpu-pci,xres=$width,yres=$height"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4"
+  -drive "file=$image,if=virtio,format=raw,snapshot=$snapshot"
   -serial "$serial"
   -monitor "$monitor"
   -display "$display"
 )
+
+case "$gpu" in
+  virtio)
+    args+=(-device "virtio-gpu-pci,xres=$width,yres=$height")
+    ;;
+  bochs)
+    args+=(-device "bochs-display,xres=$width,yres=$height")
+    ;;
+  *)
+    fail "unknown WFX_QEMU_GPU=$gpu; expected virtio or bochs"
+    ;;
+esac
 
 case "$network" in
   user)
@@ -92,6 +174,7 @@ if [ -f "$initramfs" ]; then
   args=(-initrd "$initramfs" "${args[@]}")
 fi
 
+printf 'wfx qemu: image=%s snapshot=%s accel=%s cpu=%s gpu=%s display=%s\n' "$image" "$snapshot" "$accel" "$cpu" "$gpu" "$display" >&2
 "$qemu" "${args[@]}" &
 qemu_pid=$!
 

@@ -240,14 +240,18 @@ Tranche 5 status:
 Tranche 6 status:
 
 - `kiosk-compositor` builds a custom DRM/libinput wlroots+cage stack with
-  Xwayland, EGL, GLES, Vulkan, and GBM disabled.
+  Xwayland, GLX, Vulkan, XCB, audio, DBus, and portal-style dependencies
+  rejected. The visible QEMU compositor now enables wlroots GLES2 rendering and
+  the GBM allocator because the earlier pixman-only compositor path exposed
+  transient-surface repaint bugs in Waterfox chrome.
 - `qemu-image` assembles an Alpine aarch64 rootfs image at
   `.wfx-cache/qemu/waterfox-kiosk.ext4`.
 - `qemu-image` now creates an `initramfs-virt`, installs BusyBox applet symlinks
   after the no-scripts APK install, and includes the rootfs runtime packages
   needed by cage and Waterfox (`libgcc`, `libstdc++`, `libintl`, GTK 3, and
-  MIME/pixbuf data). It also includes Mesa EGL/GLES, Gallium software drivers,
-  `libpciaccess`, and `pciutils-libs` for Waterfox's GL probing/runtime path.
+  MIME/pixbuf data). It also includes Mesa EGL/GLES/GBM, Gallium software
+  drivers, `libpciaccess`, and `pciutils-libs` for Waterfox's GL
+  probing/runtime path and the Cage GLES2/GBM renderer.
 - Bounded `qemu-run` boots with both `WFX_QEMU_DISPLAY=none` and
   `WFX_QEMU_DISPLAY=cocoa`. In both runs, the guest reaches seatd, wlroots opens
   `/dev/dri/card0`, modesets the virtio GPU `Virtual-1` output, and
@@ -287,8 +291,11 @@ Tranche 6 status:
   confirmed virtio input devices, Cage startup, Waterfox surfaces, and no GTK
   pixbuf crash before the host timeout stopped QEMU.
 - Mouse input was manually verified in the Cocoa QEMU window. Keyboard events
-  now work in the Cocoa QEMU window. Before the latest Mesa runtime additions,
-  typed URL bar text submitted but did not visibly repaint. Keyboard events
+  now work in the Cocoa QEMU window. Typed URL bar text submitted but did not
+  visibly repaint, and popup/context menus rendered as blank or garbled narrow
+  surfaces under the pixman-only compositor path. The QEMU compositor now uses
+  wlroots GLES2 plus GBM with software EGL allowed in the proof image; manually
+  recheck URL bar repaint and popup/context menus in Cocoa. Keyboard events
   initially exposed URL bar exceptions because
   `browser/waterfox.ftl` was missing from the packaged locale bundle. Adding the
   en-US Waterfox Fluent resource, rebuilding, repackaging, and rebuilding the
@@ -303,8 +310,9 @@ Tranche 6 status:
 
 Next resume actions:
 
-1. Manually verify whether URL bar typed text now visibly repaints in the Cocoa
-   QEMU window after adding Mesa EGL/GLES runtime libraries.
+1. Manually verify whether URL bar typed text, hamburger popup menus, and
+   right-click context menus now repaint correctly in the Cocoa QEMU window
+   after switching the compositor to wlroots GLES2/GBM.
 2. Decide whether to filter or fix remaining Gecko debug-build warning spam
    (`PuppetWidget without Tab`, bundled sidebar extension errors) or leave it
    as useful debug output.
@@ -322,6 +330,11 @@ Next resume actions:
   musl did not apply during `dlopen`, which crashed during `libnspr4.so`
   initialization. This is acceptable for debug iteration because it avoids a
   size/startup optimization, not required functionality.
+- Final staged Waterfox ELF dependency checks are exact-set checks. The allowed
+  NEEDED list lives in `docker/waterfox-musl/waterfox-allowed-needed.txt`, and
+  `docker/waterfox-musl/wfx-musl waterfox-deps` fails on unexpected libraries,
+  missing expected libraries, X11/XCB/GLX-family dependencies, and rejected
+  packed relocation tags.
 
 ### Tranche 1: Scaffolding And Toolchain Image
 
