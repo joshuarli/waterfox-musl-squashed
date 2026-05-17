@@ -105,10 +105,10 @@ export SEATD_SOCK=/run/seatd.sock
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
-seatd -g root -n 1 -s "$SEATD_SOCK" -l debug >/var/log/seatd.log 2>&1 &
+seatd -g root -n 1 -s "$SEATD_SOCK" -l debug >/dev/console 2>&1 &
 sleep 1
 
-exec cage -- /usr/bin/waterfox about:blank >/var/log/waterfox-kiosk.log 2>&1
+exec cage -- /usr/bin/waterfox about:blank >/dev/console 2>&1
 EOF
   chmod 0755 "$rootfs/usr/local/bin/wfx-kiosk-init"
 }
