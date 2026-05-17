@@ -151,6 +151,9 @@ SOURCES += [
     # nsLocalFileMac.h which upsets other files in this dir that have a different
     # idea about what `TextRange` means.
     "nsDumpUtils.cpp",
+    # nsSystemInfo.cpp needs musl's <link.h> ELF definitions without unified
+    # build include pollution.
+    "nsSystemInfo.cpp",
 ]
 SOURCES["nsDebugImpl.cpp"].no_pgo = True
 
@@ -192,7 +195,6 @@ UNIFIED_SOURCES += [
     "nsMemoryReporterManager.cpp",
     "NSPRLogModulesParser.cpp",
     "nsSecurityConsoleMessage.cpp",
-    "nsSystemInfo.cpp",
     "nsTraceRefcnt.cpp",
     "nsUUIDGenerator.cpp",
     "nsVersionComparator.cpp",

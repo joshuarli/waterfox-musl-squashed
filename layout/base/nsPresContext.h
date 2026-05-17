@@ -492,7 +492,7 @@ class nsPresContext : public nsISupports, public mozilla::SupportsWeakPtr {
    * XXX This raises the obvious question of why a document that isn't a page
    *     is paginated; there isn't a good reason except history
    */
-  bool IsRootPaginatedDocument() { return mIsRootPaginatedDocument; }
+  bool IsRootPaginatedDocument() const { return mIsRootPaginatedDocument; }
   void SetIsRootPaginatedDocument(bool aIsRootPaginatedDocument) {
     mIsRootPaginatedDocument = aIsRootPaginatedDocument;
   }

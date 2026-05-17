@@ -20,4 +20,4 @@ LOCAL_INCLUDES += [
 
 prefix = CONFIG["WFX_MIMALLOC_PREFIX"]
 CXXFLAGS += ["-I%s/include" % prefix]
-OS_LIBS += ["%s/lib/libmimalloc.a" % prefix]
+OS_LIBS += ["-Wl,%s/lib/libmimalloc.a" % prefix]

@@ -681,15 +681,27 @@ set_define("MOZ_WAYLAND", depends_if(wayland_headers)(lambda _: True))
 
 # Hardware-accelerated video decode with VAAPI and V4L2 on Linux
 # ==============================================================
-set_config("MOZ_ENABLE_VAAPI", True, when=toolkit_gtk)
-set_define("MOZ_ENABLE_VAAPI", True, when=toolkit_gtk)
+option("--disable-vaapi", default=True, help="{Enable|Disable} VAAPI support")
 
 
-@depends(target, toolkit_gtk)
-def v4l2(target, toolkit_gtk):
+@depends(toolkit_gtk, "--enable-vaapi")
+def vaapi(toolkit_gtk, enabled):
+    if toolkit_gtk and enabled:
+        return True
+
+
+set_config("MOZ_ENABLE_VAAPI", True, when=vaapi)
+set_define("MOZ_ENABLE_VAAPI", True, when=vaapi)
+
+
+option("--disable-v4l2", default=True, help="{Enable|Disable} V4L2 support")
+
+
+@depends(target, toolkit_gtk, "--enable-v4l2")
+def v4l2(target, toolkit_gtk, enabled):
     # V4L2 decode is only used in GTK/Linux and generally only appears on
     # embedded SOCs.
-    if target.cpu in ("arm", "aarch64", "riscv64") and toolkit_gtk:
+    if enabled and target.cpu in ("arm", "aarch64", "riscv64") and toolkit_gtk:
         return True
 
 

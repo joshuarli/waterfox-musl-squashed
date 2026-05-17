@@ -36,6 +36,7 @@ ensure_cache_dirs() {
     "$cache_dir/sources" \
     "$cache_dir/build" \
     "$cache_dir/build-deps" \
+    "$cache_dir/test-compositor" \
     "$cache_dir/sysroot" \
     "$cache_dir/mozbuild" \
     "$cache_dir/sccache" \
@@ -66,6 +67,7 @@ run_in_image() {
     --volume "$repo_root:/work" \
     --volume "$cache_dir:/cache" \
     --volume "$cache_dir/build-deps:/opt/wfx/build-deps" \
+    --volume "$cache_dir/test-compositor:/opt/wfx/test-compositor" \
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
@@ -90,6 +92,7 @@ run_shell() {
     --volume "$repo_root:/work" \
     --volume "$cache_dir:/cache" \
     --volume "$cache_dir/build-deps:/opt/wfx/build-deps" \
+    --volume "$cache_dir/test-compositor:/opt/wfx/test-compositor" \
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
@@ -105,6 +108,8 @@ edge_versions() {
   run_in_image sh -euc '
 apk update --cache-dir /var/cache/apk >/dev/null
 packages="
+clang21
+clang21-libclang
 clang22
 lld22
 llvm22
@@ -208,9 +213,15 @@ case "$command" in
     run_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package)
-    run_in_image ./mach package
+    run_in_image sh -euc './mach package && /work/docker/waterfox-musl/package-stage1'
     ;;
-  smoke-headless|qemu-image|qemu-run)
+  test-compositor)
+    run_in_image /work/docker/waterfox-musl/build-test-compositor build
+    ;;
+  smoke-headless)
+    run_in_image sh -euc '/work/docker/waterfox-musl/build-test-compositor build && /work/docker/waterfox-musl/smoke-headless'
+    ;;
+  qemu-image|qemu-run)
     reserved
     ;;
   -h|--help|help)

@@ -108,6 +108,7 @@ exclude = [
     "SECItemStr",
     "SECItemArrayStr",
     "SECItemType",
+    "SECSupportExtenTag",
 ]
 variables = [
     "CK_INVALID_HANDLE",

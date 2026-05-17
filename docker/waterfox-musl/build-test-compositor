@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=${WFX_REPO_ROOT:-/work}
+cache=${WFX_CACHE:-/cache}
+prefix=${WFX_TEST_COMPOSITOR:-/opt/wfx/test-compositor}
+lock=${WFX_SOURCES_LOCK:-$repo_root/docker/waterfox-musl/sources.lock}
+sources=$cache/sources
+build_root=$cache/build/test-compositor
+jobs=${JOBS:-${WFX_JOBS:-$(nproc)}}
+
+mkdir -p "$sources" "$build_root" "$prefix" "$prefix/.wfx-stamps"
+
+export PATH=$prefix/bin:/usr/lib/ninja-build/bin:/usr/lib/llvm22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export CC=${CC:-clang-22}
+export CXX=${CXX:-clang++-22}
+export PKG_CONFIG_PATH=$prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
+export CFLAGS=${CFLAGS:-"-O2 -g0 -fPIC"}
+export CXXFLAGS=${CXXFLAGS:-"-O2 -g0 -fPIC"}
+export LDFLAGS=${LDFLAGS:-"-fuse-ld=mold -Wl,--as-needed -Wl,-rpath,$prefix/lib"}
+export LD_LIBRARY_PATH=$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+
+fail() {
+  printf 'wfx test compositor failed: %s\n' "$*" >&2
+  exit 1
+}
+
+source_row() {
+  awk -v package="$1" '$1 == package { print; found = 1 } END { exit found ? 0 : 1 }' "$lock"
+}
+
+source_field() {
+  local name=$1 field=$2
+  source_row "$name" | awk -v field="$field" '{ print $field }'
+}
+
+source_version() {
+  source_field "$1" 2
+}
+
+source_url() {
+  source_field "$1" 3
+}
+
+source_sha256() {
+  source_field "$1" 4
+}
+
+archive_path() {
+  local name=$1 url
+  url=$(source_url "$name")
+  printf '%s/%s\n' "$sources" "${url##*/}"
+}
+
+fetch_source() {
+  local name=$1 url sha archive
+  url=$(source_url "$name")
+  sha=$(source_sha256 "$name")
+  archive=$(archive_path "$name")
+
+  if [ ! -f "$archive" ]; then
+    curl -fL "$url" -o "$archive.tmp"
+    mv "$archive.tmp" "$archive"
+  fi
+
+  printf '%s  %s\n' "$sha" "$archive" | sha256sum -c -
+}
+
+unpack_source() {
+  local name=$1 archive top
+  archive=$(archive_path "$name")
+  top=$(tar -tf "$archive" | awk -F/ 'NF { print $1; exit }')
+  rm -rf "$build_root/$top"
+  tar -xf "$archive" -C "$build_root"
+  printf '%s/%s\n' "$build_root" "$top"
+}
+
+stamp_path() {
+  printf '%s/.wfx-stamps/%s-%s\n' "$prefix" "$1" "$(source_version "$1")"
+}
+
+already_built() {
+  [ "${WFX_FORCE_REBUILD:-0}" != 1 ] && [ -f "$(stamp_path "$1")" ]
+}
+
+mark_built() {
+  local name=$1 stamp
+  stamp=$(stamp_path "$name")
+  {
+    printf 'name=%s\n' "$name"
+    printf 'version=%s\n' "$(source_version "$name")"
+    printf 'cc=%s\n' "$($CC --version | sed -n '1p')"
+    printf 'built_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  } > "$stamp"
+}
+
+meson_build_install() {
+  local dir=$1 build=$2
+  shift 2
+  meson setup "$dir/$build" "$dir" \
+    --prefix="$prefix" \
+    --libdir=lib \
+    --buildtype=debugoptimized \
+    --wrap-mode=nodownload \
+    "$@"
+  meson compile -C "$dir/$build" -j "$jobs"
+  meson install --no-rebuild -C "$dir/$build"
+}
+
+build_wlroots() {
+  local dir
+  already_built wlroots && return 0
+  fetch_source wlroots
+  dir=$(unpack_source wlroots)
+  meson_build_install "$dir" build \
+    -Dauto_features=disabled \
+    -Dbackends=[] \
+    -Drenderers=[] \
+    -Dallocators=[] \
+    -Dxwayland=disabled \
+    -Dsession=disabled \
+    -Dexamples=false \
+    -Dcolor-management=disabled \
+    -Dlibliftoff=disabled \
+    -Dxcb-errors=disabled
+  mark_built wlroots
+}
+
+build_cage() {
+  local dir
+  already_built cage && return 0
+  fetch_source cage
+  dir=$(unpack_source cage)
+  patch -d "$dir" -p1 < "$repo_root/docker/waterfox-musl/patches/cage-wlroots0.20.patch"
+  meson_build_install "$dir" build -Dman-pages=disabled
+  mark_built cage
+}
+
+scan_dependencies() {
+  local reject_regex report
+  reject_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libvulkan|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups'
+  report=$cache/dist/test-compositor.deps.txt
+  : > "$report"
+  while IFS= read -r -d '' file; do
+    if ! readelf -h "$file" >/dev/null 2>&1; then
+      continue
+    fi
+    {
+      printf '### %s\n' "${file#"$prefix"/}"
+      readelf -d "$file" 2>/dev/null | sed -n '/NEEDED/p'
+      printf '\n'
+    } >> "$report"
+    if readelf -d "$file" 2>/dev/null | grep -E "$reject_regex"; then
+      fail "rejected compositor dependency in ${file#"$prefix"/}"
+    fi
+  done < <(find "$prefix/bin" "$prefix/lib" -type f -print0 2>/dev/null)
+}
+
+build_all() {
+  build_wlroots
+  build_cage
+  scan_dependencies
+}
+
+case "${1:-build}" in
+  build)
+    build_all
+    ;;
+  scan)
+    scan_dependencies
+    ;;
+  *)
+    printf 'usage: %s [build|scan]\n' "$0" >&2
+    exit 2
+    ;;
+esac

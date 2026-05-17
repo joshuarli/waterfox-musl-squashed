@@ -327,9 +327,11 @@ nsMenuItem::item_activated_cb(DbusmenuMenuitem *menuitem,
 void
 nsMenuItem::Activate(uint32_t aTimestamp)
 {
+#ifdef MOZ_X11
     GdkWindow *window = gtk_widget_get_window(MenuBar()->TopLevelWindow());
     gdk_x11_window_set_user_time(
         window, std::min(aTimestamp, gdk_x11_get_server_time(window)));
+#endif
 
     // We do this to avoid mutating our view of the menu until
     // after we have finished

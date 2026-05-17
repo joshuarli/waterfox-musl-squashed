@@ -11,9 +11,10 @@ use crate::error_reporting::ContextualParseError;
 use crate::gecko_bindings::{
     bindings::Gecko_AppendPaletteValueHashEntry,
     bindings::{Gecko_SetFontPaletteBase, Gecko_SetFontPaletteOverride},
-    structs::gfx::FontPaletteValueSet,
-    structs::PaletteValues_kDark as FontPaletteValueSet_PaletteValues_kDark,
-    structs::PaletteValues_kLight as FontPaletteValueSet_PaletteValues_kLight,
+    structs::root::mozilla::gfx::{
+        FontPaletteValueSet, FontPaletteValueSet_PaletteValues_kDark,
+        FontPaletteValueSet_PaletteValues_kLight,
+    },
 };
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};

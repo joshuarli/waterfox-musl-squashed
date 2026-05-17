@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=${WFX_REPO_ROOT:-/work}
+cache=${WFX_CACHE:-/cache}
+objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl}
+sysroot=${WFX_RUNTIME_SYSROOT:-/opt/wfx/sysroot}
+dist=$cache/dist
+stage=$dist/stage1-root
+package=${WFX_WATERFOX_PACKAGE:-}
+version=${WFX_STAGE1_VERSION:-}
+date_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
+
+mkdir -p "$dist"
+
+if [ -z "$package" ]; then
+  package=$(find "$objdir/dist" -maxdepth 1 -type f \
+    -name 'waterfox-*.linux-musl-aarch64.tar.xz' | sort | tail -n 1)
+fi
+
+if [ -z "$package" ] || [ ! -f "$package" ]; then
+  printf 'missing Waterfox package under %s/dist\n' "$objdir" >&2
+  exit 1
+fi
+
+if [ -z "$version" ]; then
+  version=$(basename "$package" .tar.xz)
+fi
+
+rm -rf "$stage"
+mkdir -p "$stage/opt/waterfox" "$stage/opt/wfx" "$stage/usr/bin"
+
+tar -xf "$package" -C "$stage/opt/waterfox" --strip-components=1
+tar -C "$sysroot" -cf - . | tar -C "$stage/opt/wfx" -xf -
+mv "$stage/opt/wfx" "$stage/opt/wfx.tmp"
+mkdir -p "$stage/opt/wfx"
+mv "$stage/opt/wfx.tmp" "$stage/opt/wfx/sysroot"
+
+cat > "$stage/usr/bin/waterfox" <<'EOF'
+#!/bin/sh
+export MOZ_ENABLE_WAYLAND=1
+export GDK_BACKEND=wayland
+export NO_AT_BRIDGE=1
+export MOZ_DISABLE_AUTO_SAFE_MODE=1
+export MOZ_CRASHREPORTER_DISABLE=1
+export LD_LIBRARY_PATH=/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+exec /opt/waterfox/waterfox "$@"
+EOF
+chmod 0755 "$stage/usr/bin/waterfox"
+
+scan_report=$dist/$version.deps.txt
+reject_report=$dist/$version.rejected-deps.txt
+manifest=$dist/$version.manifest.txt
+artifact=$dist/$version.stage1-debug.tar.xz
+reject_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+
+: > "$scan_report"
+: > "$reject_report"
+elf_count=0
+
+while IFS= read -r -d '' file; do
+  if ! "$readelf" -h "$file" >/dev/null 2>&1; then
+    continue
+  fi
+  elf_count=$((elf_count + 1))
+  rel=${file#"$stage"/}
+  {
+    printf '### %s\n' "$rel"
+    "$readelf" -d "$file" 2>/dev/null | sed -n '/NEEDED/p'
+    printf '\n'
+  } >> "$scan_report"
+  if "$readelf" -d "$file" 2>/dev/null | grep -E "$reject_regex" >> "$reject_report"; then
+    printf 'rejected dependency in %s\n' "$rel" >> "$reject_report"
+  fi
+  if "$readelf" -d "$file" 2>/dev/null | grep -E '0x000000000800002[345]' >> "$reject_report"; then
+    printf 'rejected Android packed relative relocation tag in %s\n' "$rel" >> "$reject_report"
+  fi
+done < <(find "$stage/opt/waterfox" "$stage/opt/wfx/sysroot" -type f -print0)
+
+if [ "$elf_count" -eq 0 ]; then
+  printf 'no ELF files found in staged artifact\n' >&2
+  exit 1
+fi
+
+if [ -s "$reject_report" ]; then
+  cat "$reject_report" >&2
+  exit 1
+fi
+
+tar -C "$stage" -cJf "$artifact" opt usr
+
+{
+  printf 'artifact=%s\n' "$artifact"
+  printf 'source_package=%s\n' "$package"
+  printf 'build_date_utc=%s\n' "$date_utc"
+  printf 'waterfox_git_commit=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
+  printf 'waterfox_git_dirty=%s\n' "$(git -C "$repo_root" status --short | wc -l | tr -d ' ')"
+  printf 'alpine_release=%s\n' "$(cat /etc/alpine-release)"
+  printf 'docker_image_id=%s\n' "$(cat /etc/hostname)"
+  printf 'cc=%s\n' "$(command -v clang-22)"
+  printf 'cxx=%s\n' "$(command -v clang++-22)"
+  printf 'linker=%s\n' "$(command -v mold)"
+  printf 'readelf=%s\n' "$(command -v "$readelf" 2>/dev/null || printf '%s' "$readelf")"
+  printf 'mozconfig=%s\n' "$MOZCONFIG"
+  printf 'elf_count=%s\n' "$elf_count"
+  printf 'dependency_scan=%s\n' "$scan_report"
+  printf 'rejected_dependency_scan=%s\n' "$reject_report"
+  printf '\n[mozconfig]\n'
+  cat "$MOZCONFIG"
+  printf '\n[apk]\n'
+  apk info -vv | sort
+  printf '\n[sources.lock]\n'
+  cat "$repo_root/docker/waterfox-musl/sources.lock"
+} > "$manifest"
+
+printf 'Created stage 1 artifact: %s\n' "$artifact"
+printf 'Created manifest: %s\n' "$manifest"

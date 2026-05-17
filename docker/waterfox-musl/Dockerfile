@@ -19,6 +19,8 @@ RUN --mount=type=cache,target=/var/cache/apk \
       ca-certificates \
       cargo \
       cbindgen \
+      clang21 \
+      clang21-libclang \
       clang22 \
       clang22-dev \
       cmake \
@@ -111,6 +113,7 @@ printf 'arch='
 apk --print-arch
 clang-22 --version | sed -n '1p'
 clang++-22 --version | sed -n '1p'
+clang++-21 --version | sed -n '1p'
 ld.lld --version | sed -n '1p'
 mold --version
 ninja --version

@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cache=${WFX_CACHE:-/cache}
+prefix=${WFX_TEST_COMPOSITOR:-/opt/wfx/test-compositor}
+stage=${WFX_STAGE_ROOT:-$cache/dist/stage1-root}
+log_dir=$cache/build/smoke-headless
+waterfox_opt=/opt/waterfox
+runtime=/run/user/0
+readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
+
+mkdir -p "$log_dir" "$runtime"
+chmod 0700 "$runtime"
+
+fail() {
+  printf 'wfx headless smoke failed: %s\n' "$*" >&2
+  if [ -f "$log_dir/cage-waterfox.log" ]; then
+    tail -n 80 "$log_dir/cage-waterfox.log" >&2 || true
+  fi
+  exit 1
+}
+
+[ -x "$prefix/bin/cage" ] || fail "missing $prefix/bin/cage"
+[ -d "$stage/opt/waterfox" ] || fail "missing staged /opt/waterfox"
+
+rm -f "$waterfox_opt"
+ln -s "$stage/opt/waterfox" "$waterfox_opt"
+
+log=$log_dir/cage-waterfox.log
+maps_report=$log_dir/loaded-libraries.txt
+profile=$log_dir/profile
+report=$cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.headless-smoke.txt
+manifest=$cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.manifest.txt
+reject_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libvulkan|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+
+collect_tree() {
+  local root=$1 seen next pid ppid
+  seen=" $root "
+  next=1
+  while [ "$next" = 1 ]; do
+    next=0
+    for pid in /proc/[0-9]*; do
+      pid=${pid##*/}
+      [ -r "/proc/$pid/status" ] || continue
+      ppid=$(awk '/^PPid:/ { print $2 }' "/proc/$pid/status")
+      case "$seen" in
+        *" $pid "*) ;;
+        *" $ppid "*) seen="$seen$pid "; next=1 ;;
+      esac
+    done
+  done
+  printf '%s\n' $seen
+}
+
+collect_loaded_libraries() {
+  local pid
+  : > "$maps_report"
+  for pid in $(collect_tree "$1"); do
+    [ -r "/proc/$pid/maps" ] || continue
+    awk '/\.so/ { print $NF }' "/proc/$pid/maps" >> "$maps_report"
+  done
+  sort -u "$maps_report" -o "$maps_report"
+}
+
+export XDG_RUNTIME_DIR=$runtime
+export WAYLAND_DISPLAY=wayland-0
+export WLR_BACKENDS=headless
+export WLR_RENDERER=pixman
+export WLR_HEADLESS_OUTPUTS=1
+export MOZ_ENABLE_WAYLAND=1
+export GDK_BACKEND=wayland
+export NO_AT_BRIDGE=1
+export MOZ_WEBRENDER_SOFTWARE=1
+export LIBGL_ALWAYS_SOFTWARE=1
+export MOZ_DISABLE_AUTO_SAFE_MODE=1
+export MOZ_CRASHREPORTER_DISABLE=1
+export WAYLAND_DEBUG=1
+export LD_LIBRARY_PATH=$waterfox_opt:$prefix/lib:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+
+: > "$log"
+rm -rf "$profile"
+mkdir -p "$profile"
+cat > "$profile/user.js" <<'EOF'
+user_pref("app.normandy.enabled", false);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("browser.startup.page", 0);
+user_pref("browser.urlbar.speculativeConnect.enabled", false);
+user_pref("datareporting.healthreport.uploadEnabled", false);
+user_pref("network.captive-portal-service.enabled", false);
+user_pref("network.connectivity-service.enabled", false);
+user_pref("network.http.http3.enable", false);
+user_pref("network.http.speculative-parallel-limit", 0);
+user_pref("network.predictor.enabled", false);
+user_pref("network.prefetch-next", false);
+user_pref("toolkit.telemetry.enabled", false);
+EOF
+"$prefix/bin/cage" -- "$waterfox_opt/waterfox" -no-remote -profile "$profile" about:blank > "$log" 2>&1 &
+cage_pid=$!
+
+surface_seen=0
+for _ in $(seq 1 60); do
+  if ! kill -0 "$cage_pid" 2>/dev/null; then
+    wait "$cage_pid" || true
+    fail "cage exited before Waterfox created a Wayland toplevel"
+  fi
+  if grep -Eq 'xdg_toplevel|get_toplevel' "$log"; then
+    surface_seen=1
+    break
+  fi
+  sleep 1
+done
+
+[ "$surface_seen" = 1 ] || fail "timed out waiting for a Wayland surface"
+
+collect_loaded_libraries "$cage_pid"
+
+kill "$cage_pid" 2>/dev/null || true
+wait "$cage_pid" 2>/dev/null || true
+
+if grep -Eiq 'cannot open shared object|Error loading shared library|missing symbol|symbol not found|Gtk-WARNING.*cannot open display|cannot initialize.*Wayland' "$log"; then
+  fail "startup log contains loader or GTK initialization failure"
+fi
+
+if grep -E "$reject_regex" "$log" "$maps_report"; then
+  fail "runtime log or loaded library map contains a rejected dependency"
+fi
+
+if ! "$readelf" -d "$prefix/bin/cage" >/dev/null 2>&1; then
+  fail "cage is not an ELF executable"
+fi
+
+{
+  printf 'result=pass\n'
+  printf 'date_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  printf 'cage=%s\n' "$prefix/bin/cage"
+  printf 'waterfox=%s\n' "$waterfox_opt/waterfox"
+  printf 'profile=%s\n' "$profile"
+  printf 'log=%s\n' "$log"
+  printf 'loaded_libraries=%s\n' "$maps_report"
+  printf 'surface_probe=wayland-debug xdg_toplevel|get_toplevel\n'
+} > "$report"
+
+if [ -f "$manifest" ]; then
+  {
+    printf '\n[docker-headless-smoke]\n'
+    cat "$report"
+  } >> "$manifest"
+fi
+
+printf 'Headless Wayland smoke passed: %s\n' "$report"

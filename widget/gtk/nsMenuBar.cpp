@@ -24,7 +24,9 @@
 #include "nsNativeMenuService.h"
 
 #include <gdk/gdk.h>
-#include <gdk/gdkx.h>
+#ifdef MOZ_X11
+#  include <gdk/gdkx.h>
+#endif
 #include <glib.h>
 #include <glib-object.h>
 
@@ -167,6 +169,9 @@ nsMenuBar::Init(nsIWidget *aParent)
         return NS_ERROR_FAILURE;
     }
 
+#ifndef MOZ_X11
+    return NS_ERROR_NOT_AVAILABLE;
+#else
     g_object_ref(mTopLevel);
 
     nsAutoCString path;
@@ -187,6 +192,7 @@ nsMenuBar::Init(nsIWidget *aParent)
     }
 
     dbusmenu_server_set_root(mServer, GetNativeData());
+#endif
 
     mEventListener = new DocEventListener(this);
 
@@ -480,7 +486,11 @@ nsMenuBar::IsBeingDisplayed() const
 uint32_t
 nsMenuBar::WindowId() const
 {
+#ifdef MOZ_X11
     return static_cast<uint32_t>(GDK_WINDOW_XID(gtk_widget_get_window(mTopLevel)));
+#else
+    return 0;
+#endif
 }
 
 nsCString

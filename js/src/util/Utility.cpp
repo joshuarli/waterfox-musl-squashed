@@ -121,7 +121,7 @@ extern void js::AssertJSStringBufferInCorrectArena(const void* ptr) {
 //  `jemalloc_ptr_info()` only exists if MOZ_MEMORY is defined, and it only
 //  returns an arenaId if MOZ_DEBUG is defined. Otherwise, this function is
 //  a no-op.
-#if defined(MOZ_MEMORY) && defined(MOZ_DEBUG)
+#if defined(MOZ_MEMORY) && defined(MOZ_DEBUG) && !defined(MOZ_MIMALLOC_REPLACE)
   if (ptr && !TlsContext.get()->nursery().isInside(ptr)) {
     jemalloc_ptr_info_t ptrInfo{};
     jemalloc_ptr_info(ptr, &ptrInfo);

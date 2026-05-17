@@ -10,7 +10,7 @@
 #  ifdef MOZ_ENABLE_DBUS
 #    include "nsDBusRemoteServer.h"
 #    include "nsDBusRemoteClient.h"
-#  else
+#  elif defined(MOZ_X11)
 #    include "nsGTKRemoteServer.h"
 #    include "nsXRemoteClient.h"
 #  endif
@@ -198,8 +198,10 @@ nsresult nsRemoteService::SendCommandLine(const nsACString& aProfile,
 #ifdef MOZ_WIDGET_GTK
 #  if defined(MOZ_ENABLE_DBUS)
   client = MakeUnique<nsDBusRemoteClient>(mStartupToken);
-#  else
+#  elif defined(MOZ_X11)
   client = MakeUnique<nsXRemoteClient>(mStartupToken);
+#  else
+  return NS_ERROR_NOT_AVAILABLE;
 #  endif
 #elif defined(XP_WIN)
   client = MakeUnique<nsWinRemoteClient>();
@@ -260,8 +262,10 @@ void nsRemoteService::StartupServer() {
 #ifdef MOZ_WIDGET_GTK
 #  if defined(MOZ_ENABLE_DBUS)
   mRemoteServer = MakeUnique<nsDBusRemoteServer>();
-#  else
+#  elif defined(MOZ_X11)
   mRemoteServer = MakeUnique<nsGTKRemoteServer>();
+#  else
+  return;
 #  endif
 #elif defined(XP_WIN)
   mRemoteServer = MakeUnique<nsWinRemoteServer>();

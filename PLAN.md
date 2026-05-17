@@ -25,7 +25,12 @@ The external runtime contract is from
 
 - Build inside Docker from `alpine:latest`.
 - Use Alpine edge package versions in general.
-- Use `clang22`, `clang++-22`, LLVM 22 tools, and `mold`.
+- Use `clang22`, `clang++-22`, LLVM 22 tools, and `mold` for compiling and
+  linking Waterfox and custom runtime libraries.
+- Stage 1 currently uses Alpine's `clang21-libclang` only for bindgen. The
+  target and host C/C++ compilers remain clang 22. This is a tracked iteration
+  relaxation for the Waterfox 140 style binding generator issue under
+  libclang 22.
 - Do not select `gcc` or `g++` for compiling or linking Waterfox or custom
   runtime libraries.
 - Tolerate Alpine installing GCC packages only as dormant transitive package
@@ -72,6 +77,8 @@ Alpine carries the package. Version resolution is intentionally explicit:
 Edge versions observed on May 17, 2026:
 
 - clang22 `22.1.3-r0`
+- clang21 `21.1.8-r1`
+- clang21-libclang `21.1.8-r1`
 - lld22 `22.1.3-r0`
 - llvm22 `22.1.3-r0`
 - rust `1.95.0-r0`
@@ -163,8 +170,9 @@ Waterfox tree, so image iteration does not upload the browser checkout.
   libraries.
 - Tranche 3 is implemented and verified: the stage 1 mozconfig has explicit
   no-audio, WebMIDI/midir disable, static mimalloc replacement, Wayland-only
-  GTK, clang22, and mold selections; `docker/waterfox-musl/wfx-musl configure`
-  passes in Docker and then runs `docker/waterfox-musl/check-config`.
+  GTK, clang22 compile/link selections, clang21-libclang for bindgen, and mold
+  selections; `docker/waterfox-musl/wfx-musl configure` passes in Docker and
+  then runs `docker/waterfox-musl/check-config`.
 - The adapted Alpine musl patch set now covers fortify/system wrapper cleanup,
   no `execinfo.h` wrapper, stat64/large-file compatibility, the sandbox
   `sched_setscheduler` allowances, and the malloc/musl declaration fixes needed
@@ -186,14 +194,26 @@ Last full build command used:
 WFX_JOBS=2 WFX_CARGO_JOBS=2 docker/waterfox-musl/wfx-musl build
 ```
 
-The last completed container build reached real Rust compilation, passed the
-stage 1 client-certificate dependency cut, and failed in `style`:
+The last completed container build passed the stage 1 client-certificate
+dependency cut, completed a debug Waterfox build with Alpine edge build-time
+dependencies, packaged it, staged the `/opt/waterfox` tree with the custom
+runtime-only `/opt/wfx/sysroot`, and passed the static dependency scan.
 
-- `style` failed because bindgen generated several Gecko C++ structs as
-  fieldless one-byte placeholders. The main missing structs were
-  `ServoComputedData`, `ComputedStyle`, `ServoElementSnapshot`,
-  `AnimatedPropertyID`, `StyleSheet`, `nsStaticAtom`, `nsDynamicAtom`,
-  `nsAttrName`, and `GeckoFontMetrics`.
+The current stage 1 debug artifact is:
+
+```text
+.wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.stage1-debug.tar.xz
+```
+
+The staged binary smoke check now passes:
+
+```sh
+waterfox-bin --version
+```
+
+It reports `BrowserWorks Waterfox 140.11.0esr`. Docker emits a sandbox user
+namespace warning and the debug build emits an XPCOM static dtor warning; both
+are expected for this smoke check and are not packaging blockers.
 
 The Cargo lockfile has been updated only for the removed `gkrust-shared`
 dependencies from the stage 1 client-certificate relaxation. Files changed for
@@ -210,14 +230,24 @@ that relaxation:
 
 Next resume actions:
 
-1. Revisit the build wrapper and mozconfig with the corrected sysroot boundary:
-   allow Alpine edge packages to satisfy Waterfox build-time pkg-config checks,
-   while reserving `/opt/wfx/sysroot` for packaged runtime libraries and
-   smoke/runtime verification.
-2. Continue with any remaining `style` binding blocker only after confirming it
-   still reproduces under the corrected build-time dependency model.
-3. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
+1. Start Tranche 5: build the separate headless Wayland compositor stack.
+2. Run the packaged debug Waterfox under the headless compositor long enough to
+   create a Wayland surface.
+3. Verify no rejected libraries are loaded at runtime.
+4. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
    or optimized builds until the final packaging profile is reached.
+
+### Known Relaxations And Followups
+
+- Stage 1 uses libclang 21 for bindgen while retaining clang/LLVM 22 for
+  compile and link. Follow up by retesting libclang 22 after the style binding
+  blocker is isolated or after Waterfox rebases to a Firefox version whose
+  Alpine package already carries any needed bindgen compatibility patches.
+- Stage 1 disables Gecko elfhack/relrhack and packed relative relocations.
+  The prior relrhack path produced Android packed relocation tags that Alpine
+  musl did not apply during `dlopen`, which crashed during `libnspr4.so`
+  initialization. This is acceptable for debug iteration because it avoids a
+  size/startup optimization, not required functionality.
 
 ### Tranche 1: Scaffolding And Toolchain Image
 
@@ -506,7 +536,8 @@ The stage 1 mozconfig lives at `docker/waterfox-musl/mozconfig.stage1`.
 Required options:
 
 ```sh
-ac_add_options --target=aarch64-unknown-linux-musl
+ac_add_options --host=aarch64-alpine-linux-musl
+ac_add_options --target=aarch64-alpine-linux-musl
 ac_add_options --enable-application=browser
 ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
 ac_add_options --enable-linker=mold
@@ -521,6 +552,8 @@ Fast/minimal stage 1 options:
 
 ```sh
 ac_add_options --disable-crashreporter
+ac_add_options --disable-elf-hack
+ac_add_options --disable-packed-relative-relocs
 ac_add_options --disable-dmd
 ac_add_options --disable-geckodriver
 ac_add_options --disable-profiling
@@ -533,6 +566,8 @@ ac_add_options --disable-printing
 ac_add_options --disable-synth-speechd
 ac_add_options --disable-webspeech
 ac_add_options --disable-ffmpeg
+ac_add_options --disable-vaapi
+ac_add_options --disable-v4l2
 ac_add_options --disable-av1
 ac_add_options --disable-jxl
 ac_add_options --without-wasm-sandboxed-libraries
@@ -643,6 +678,7 @@ GDK_BACKEND=wayland
 NO_AT_BRIDGE=1
 MOZ_DISABLE_AUTO_SAFE_MODE=1
 MOZ_CRASHREPORTER_DISABLE=1
+LD_LIBRARY_PATH=/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 ```
 
 The wrapper must not set `DISPLAY`.
@@ -661,6 +697,10 @@ Updates are owned by the package manager:
 ## Static Acceptance Checks
 
 Run checks from inside the Alpine container with LLVM tools from the same image.
+Reject Android packed relative relocation dynamic tags (`0x8000023`,
+`0x8000024`, and `0x8000025`) as well as unwanted `DT_NEEDED` entries; these
+tags indicate the relrhack/packed-reloc path has leaked back into the debug
+artifact.
 
 Reject these `DT_NEEDED` entries in every executable and shared object under
 `/opt/waterfox` and the stage 1 custom runtime closure:

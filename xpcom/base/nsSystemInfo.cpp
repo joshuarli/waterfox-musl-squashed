@@ -63,7 +63,12 @@
 #  include <unistd.h>
 #  include <fstream>
 #  ifndef ANDROID
-#    include <link.h>
+// The generated system wrapper for <link.h> can include_next into
+// dom/base/link.h before libc's header because this directory has /dom/base in
+// LOCAL_INCLUDES.
+#    pragma GCC visibility push(default)
+#    include </usr/include/link.h>
+#    pragma GCC visibility pop
 #  endif
 #  include "mozilla/Tokenizer.h"
 #  include "mozilla/widget/LSBUtils.h"

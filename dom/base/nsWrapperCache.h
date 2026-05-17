@@ -258,6 +258,21 @@ class JS_HAZ_ROOTED nsWrapperCache {
     return mFlags.Get() & ~kWrapperFlagsMask;
   }
 
+  FlagsType GetFlagsForServo() const {
+    return __atomic_load_n(mFlags.AsPtr(), __ATOMIC_RELAXED) &
+           ~kWrapperFlagsMask;
+  }
+
+  void SetFlagsForServo(FlagsType aFlagsToSet) {
+    MOZ_ASSERT((aFlagsToSet & kWrapperFlagsMask) == 0, "Bad flag mask");
+    __atomic_fetch_or(mFlags.AsPtr(), aFlagsToSet, __ATOMIC_RELAXED);
+  }
+
+  void UnsetFlagsForServo(FlagsType aFlagsToUnset) {
+    MOZ_ASSERT((aFlagsToUnset & kWrapperFlagsMask) == 0, "Bad flag mask");
+    __atomic_fetch_and(mFlags.AsPtr(), ~aFlagsToUnset, __ATOMIC_RELAXED);
+  }
+
   // This can be called from stylo threads too, so it needs to be atomic, as
   // this value may be mutated from multiple threads during servo traversal from
   // rust.

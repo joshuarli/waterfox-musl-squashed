@@ -21,7 +21,7 @@ export CARGO_BUILD_JOBS="${WFX_CARGO_JOBS:-4}"
 export RUSTC_OPT_LEVEL=0
 export CFLAGS="-O0 -g0 -w"
 export CXXFLAGS="-O0 -g0 -w"
-export LDFLAGS="-fuse-ld=mold"
+export LDFLAGS="-fuse-ld=mold -Wl,--pack-dyn-relocs=none"
 
 mk_add_options AUTOCLOBBER=1
 mk_add_options MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl
@@ -33,9 +33,12 @@ ac_add_options --enable-application=browser
 ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
 ac_add_options --enable-linker=mold
 ac_add_options --with-ccache=sccache
+ac_add_options --with-libclang-path=/usr/lib/llvm21/lib
 
 ac_add_options --disable-crashreporter
 ac_add_options --enable-debug
+ac_add_options --disable-elf-hack
+ac_add_options --disable-packed-relative-relocs
 ac_add_options --disable-dmd
 ac_add_options --disable-geckodriver
 ac_add_options --disable-profiling
@@ -49,6 +52,8 @@ ac_add_options --disable-printing
 ac_add_options --disable-synth-speechd
 ac_add_options --disable-webspeech
 ac_add_options --disable-ffmpeg
+ac_add_options --disable-vaapi
+ac_add_options --disable-v4l2
 ac_add_options --disable-av1
 ac_add_options --disable-jxl
 ac_add_options --without-wasm-sandboxed-libraries

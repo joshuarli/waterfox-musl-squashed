@@ -40,7 +40,7 @@ raw-lines = [
     "pub use self::root::mozilla::*;",
     "pub use self::root::mozilla::css::*;",
     "pub use self::root::mozilla::dom::*;",
-    "#[repr(u8)] #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)] pub enum StyleFontVariantEmoji { Normal = 0, Text = 1, Emoji = 2, Unicode = 3 }",
+    "pub type StyleFontVariantEmoji = self::root::StyleFontVariantEmoji;",
     "pub type gfxFontFeature = self::root::mozilla::gfx::FontFeature;",
     "pub type gfxFontVariation = self::root::mozilla::gfx::FontVariation;",
     "pub const ListStyle_None: u8 = self::root::mozilla::ListStyle::None as u8;",

@@ -172,14 +172,16 @@ const Document* Gecko_Node_OwnerDoc(const nsINode* aNode) {
   return aNode->OwnerDoc();
 }
 
-uint32_t Gecko_Node_Flags(const nsINode* aNode) { return aNode->GetFlags(); }
+uint32_t Gecko_Node_Flags(const nsINode* aNode) {
+  return aNode->GetFlagsForServo();
+}
 
 void Gecko_Node_SetFlags(const nsINode* aNode, uint32_t aFlags) {
-  const_cast<nsINode*>(aNode)->SetFlags(aFlags);
+  const_cast<nsINode*>(aNode)->SetFlagsForServo(aFlags);
 }
 
 void Gecko_Node_UnsetFlags(const nsINode* aNode, uint32_t aFlags) {
-  const_cast<nsINode*>(aNode)->UnsetFlags(aFlags);
+  const_cast<nsINode*>(aNode)->UnsetFlagsForServo(aFlags);
 }
 
 uint32_t Gecko_Node_SelectorFlags(const nsINode* aNode) {

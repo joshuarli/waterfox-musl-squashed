@@ -707,7 +707,7 @@ static bool IsYUV420Sampling(const AVPixelFormat& aFormat) {
          aFormat == AV_PIX_FMT_YUV420P10LE || aFormat == AV_PIX_FMT_YUV420P12LE;
 }
 
-#  if defined(MOZ_WIDGET_GTK)
+#  if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
 bool FFmpegVideoDecoder<LIBAV_VER>::IsLinuxHDR() const {
   if (!mInfo.mColorPrimaries || !mInfo.mTransferFunction) {
     return false;
