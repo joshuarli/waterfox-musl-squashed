@@ -42,6 +42,7 @@ install_rootfs_packages() {
       libdisplay-info \
       libdrm \
       libevdev \
+      libgcc \
       libinput \
       libseat \
       libxkbcommon \
@@ -52,6 +53,7 @@ install_rootfs_packages() {
       pixman \
       seatd \
       wayland >/dev/null
+  chroot "$rootfs" /bin/busybox --install -s
 }
 
 install_payloads() {
@@ -78,6 +80,7 @@ set -eu
 mount -t proc proc /proc || true
 mount -t sysfs sysfs /sys || true
 mount -t devtmpfs devtmpfs /dev || true
+mount -o remount,rw / || true
 mkdir -p /dev/pts /run /tmp /var/log
 mount -t devpts devpts /dev/pts || true
 mount -t tmpfs tmpfs /run || true
