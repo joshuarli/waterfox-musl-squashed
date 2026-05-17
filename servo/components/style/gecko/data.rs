@@ -179,10 +179,10 @@ impl PerDocumentStyleData {
     /// Create a `PerDocumentStyleData`.
     pub fn new(document: *const structs::Document) -> Self {
         let device = Device::new(document);
-        let quirks_mode = device.document().mCompatMode;
+        let quirks_mode = device.quirks_mode();
 
         PerDocumentStyleData(AtomicRefCell::new(PerDocumentStyleDataImpl {
-            stylist: Stylist::new(device, quirks_mode.into()),
+            stylist: Stylist::new(device, quirks_mode),
             undisplayed_style_cache: Default::default(),
             undisplayed_style_cache_generation: 0,
         }))

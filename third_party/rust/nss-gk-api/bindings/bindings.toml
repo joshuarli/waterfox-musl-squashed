@@ -42,6 +42,13 @@ enums = [
     "_SECStatus",
     "SECItemType",
 ]
+exclude = [
+    "SECItem",
+    "SECItemArray",
+    "SECItemStr",
+    "SECItemArrayStr",
+    "SECItemType",
+]
 
 [nss_ssl]
 types = [

@@ -24,7 +24,6 @@ RUST_TESTS = [
     "crashreporter",
     "firefox-on-glean",
     "l10nregistry",
-    "rsclientcerts",
     "selectors",
     "servo_arc",
     "qcms",

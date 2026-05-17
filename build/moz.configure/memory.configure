@@ -67,6 +67,60 @@ def replace_malloc_static(build_project):
 
 set_config("MOZ_REPLACE_MALLOC_STATIC", replace_malloc_static)
 
+
+option(
+    "--enable-mimalloc-replace",
+    default=False,
+    when="--enable-jemalloc",
+    help="{Enable|Disable} statically linked mimalloc replace-malloc",
+)
+
+
+option(
+    "--with-mimalloc-prefix",
+    nargs=1,
+    help="Path to the mimalloc static installation prefix",
+)
+
+
+@depends("--enable-mimalloc-replace", when="--enable-jemalloc")
+def mimalloc_replace(value):
+    if value:
+        return True
+
+
+imply_option(
+    "--enable-replace-malloc",
+    True,
+    reason="--enable-mimalloc-replace",
+    when=mimalloc_replace,
+)
+
+set_config("MOZ_MIMALLOC_REPLACE", mimalloc_replace)
+set_define("MOZ_MIMALLOC_REPLACE", mimalloc_replace)
+
+
+@depends("--with-mimalloc-prefix", mimalloc_replace)
+@imports("os.path")
+def mimalloc_prefix(prefix, enabled):
+    if not prefix:
+        if enabled:
+            die("--enable-mimalloc-replace requires --with-mimalloc-prefix")
+        return None
+
+    path = prefix[0]
+    if enabled:
+        header = os.path.join(path, "include", "mimalloc.h")
+        archive = os.path.join(path, "lib", "libmimalloc.a")
+        if not os.path.exists(header):
+            die("mimalloc header not found: %s" % header)
+        if not os.path.exists(archive):
+            die("mimalloc static archive not found: %s" % archive)
+    return path
+
+
+set_config("WFX_MIMALLOC_PREFIX", mimalloc_prefix)
+
 # PHC (Probabilistic Heap Checker)
 # ==============================================================
 

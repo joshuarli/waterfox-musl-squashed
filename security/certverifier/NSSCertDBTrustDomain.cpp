@@ -1789,32 +1789,11 @@ bool LoadUserModuleFromXul(const char* moduleName,
   return true;
 }
 
-extern "C" {
-// Extern function to call ipcclientcerts module C_GetFunctionList.
-// NSS calls it to obtain the list of functions comprising this module.
-// ppFunctionList must be a valid pointer.
-CK_RV IPCCC_GetFunctionList(CK_FUNCTION_LIST_PTR_PTR ppFunctionList);
-}  // extern "C"
-
 bool LoadIPCClientCertsModule() {
-  // The IPC client certs module needs to be able to call back into gecko to be
-  // able to communicate with the parent process over IPC. This is achieved by
-  // calling the external to Rust module functions DoSign and DoFindObjects.
-
-  if (!LoadUserModuleFromXul(kIPCClientCertsModuleName.get(),
-                             IPCCC_GetFunctionList)) {
-    return false;
-  }
-  RunOnShutdown(
-      []() {
-        UniqueSECMODModule ipcClientCertsModule(
-            SECMOD_FindModule(kIPCClientCertsModuleName.get()));
-        if (ipcClientCertsModule) {
-          SECMOD_UnloadUserModule(ipcClientCertsModule.get());
-        }
-      },
-      ShutdownPhase::XPCOMWillShutdown);
-  return true;
+  // Stage 1 musl builds omit the Rust ipcclientcerts module to keep the
+  // bootstrap dependency graph small. Client certificate authentication remains
+  // disabled until this module is restored.
+  return false;
 }
 
 extern "C" {

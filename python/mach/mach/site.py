@@ -425,6 +425,9 @@ class MachSiteManager:
         if self._site_packages_source != SitePackagesSource.VENV:
             pass
 
+        if os.environ.get("WFX_SKIP_MACH_OPTIONAL"):
+            return
+
         self._virtualenv().install_optional_packages(
             self._requirements.pypi_optional_requirements
         )

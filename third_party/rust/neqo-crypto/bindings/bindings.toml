@@ -144,6 +144,9 @@ types = [
     "HpkeAeadId",
     "HpkeKdfId",
     "HpkeKemId",
+    "SECOidData",
+    "SECOidDataStr",
+    "SECSupportExtenTag",
     "SECItem",
     "SECItemArray",
 ]
@@ -184,6 +187,7 @@ enums = [
     "HpkeKemId",
     "PK11ObjectType",
     "PK11Origin",
+    "SECSupportExtenTag",
     "SECItemType",
     "SECOidTag",
 ]
@@ -194,6 +198,15 @@ opaque = [
     "PK11SymKey",
     "SECKEYPrivateKey",
     "SECKEYPublicKey",
+]
+exclude = [
+    "SECOidData",
+    "SECOidDataStr",
+    "SECItem",
+    "SECItemArray",
+    "SECItemStr",
+    "SECItemArrayStr",
+    "SECItemType",
 ]
 variables = [
     "CKA_DERIVE",
@@ -237,7 +250,36 @@ variables = [
 ]
 
 [nspr_io]
-types = ["PRIOMethods"]
+types = [
+    "PR.*FN",
+    "PRBool",
+    "PRDescIdentity",
+    "PRDescType",
+    "PRFileDesc",
+    "PRInt16",
+    "PRInt32",
+    "PRInt64",
+    "PRIntn",
+    "PRIntervalTime",
+    "PRIPv6Addr",
+    "PRLinger",
+    "PRMcastRequest",
+    "PRNetAddr",
+    "PROffset32",
+    "PROffset64",
+    "PRIOMethods",
+    "PRSeekWhence",
+    "PRSize",
+    "PRSocketOptionData",
+    "PRSockOption",
+    "PRStatus",
+    "PRTransmitFileFlags",
+    "PRUint16",
+    "PRUint32",
+    "PRUint64",
+    "PRUint8",
+    "PRUintn",
+]
 functions = [
     "PR_Close",
     "PR_CreateIOLayerStub",
@@ -260,6 +302,11 @@ enums = [
     "PRSeekWhence",
     "PRSockOption",
     "PRTransmitFileFlags",
+]
+exclude = [
+    "PRFileDesc",
+    "PRIOMethods",
+    "PRNetAddr",
 ]
 
 [nspr_time]

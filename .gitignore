@@ -73,6 +73,7 @@ security/manager/.nss.checkout
 
 # Build directories
 /obj*/
+/.wfx-cache/
 
 # Hazard analysis results
 /haz-*/

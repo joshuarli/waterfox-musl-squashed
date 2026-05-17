@@ -360,7 +360,7 @@ unsafe extern "C" fn agent_getname(_fd: PrFd, addr: *mut prio::PRNetAddr) -> PrS
 unsafe extern "C" fn agent_getsockopt(_fd: PrFd, opt: *mut prio::PRSocketOptionData) -> PrStatus {
     if let Some(o) = opt.as_mut() {
         if o.option == prio::PRSockOption::PR_SockOpt_Nonblocking {
-            o.value.non_blocking = 1;
+            *o.value.non_blocking.as_mut() = 1;
             return PR_SUCCESS;
         }
     }

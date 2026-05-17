@@ -1,0 +1,220 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+
+image=${WFX_IMAGE:-waterfox-musl:edge-clang22}
+platform=${WFX_DOCKER_PLATFORM:-linux/arm64}
+cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
+
+usage() {
+  cat <<'EOF'
+usage: docker/waterfox-musl/wfx-musl <command>
+
+commands:
+  image             Build the Alpine edge clang22 toolchain image.
+  versions          Report current Alpine edge package versions.
+  toolchain-report  Report selected compiler, linker, Rust, and cache tools.
+  shell             Open an interactive shell in the toolchain container.
+  sysroot           Reserved for the custom Wayland/GTK sysroot tranche.
+  sysroot-smoke     Compile and run a small program against the custom sysroot.
+  configure-check   Verify the generated stage 1 Gecko configuration.
+  configure         Reserved for the Gecko patch/configure tranche.
+  build             Reserved for the Waterfox build tranche.
+  package           Reserved for the package tranche.
+  check             Reserved for static dependency checks.
+  smoke-headless    Reserved for Docker headless Wayland/cage smoke.
+  qemu-image        Reserved for QEMU rootfs/image assembly.
+  qemu-run          Reserved for QEMU visible kiosk proof.
+EOF
+}
+
+ensure_cache_dirs() {
+  mkdir -p \
+    "$cache_dir/apk" \
+    "$cache_dir/sources" \
+    "$cache_dir/build" \
+    "$cache_dir/sysroot" \
+    "$cache_dir/mozbuild" \
+    "$cache_dir/sccache" \
+    "$cache_dir/cargo" \
+    "$cache_dir/obj-aarch64-unknown-linux-musl" \
+    "$cache_dir/obj-aarch64-alpine-linux-musl" \
+    "$cache_dir/dist" \
+    "$cache_dir/test-rootfs" \
+    "$cache_dir/qemu"
+}
+
+build_image() {
+  DOCKER_BUILDKIT=1 docker build \
+    --platform "$platform" \
+    --tag "$image" \
+    --file "$script_dir/Dockerfile" \
+    "$script_dir"
+}
+
+run_in_image() {
+  ensure_cache_dirs
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    build_image
+  fi
+  docker run \
+    --rm \
+    --platform "$platform" \
+    --volume "$repo_root:/work" \
+    --volume "$cache_dir:/cache" \
+    --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
+    --volume "$cache_dir/apk:/var/cache/apk" \
+    --workdir /work \
+    --env MOZCONFIG=/work/docker/waterfox-musl/mozconfig.stage1 \
+    --env WFX_SKIP_MACH_OPTIONAL=1 \
+    --env WFX_JOBS="${WFX_JOBS:-4}" \
+    --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
+    "$image" \
+    "$@"
+}
+
+run_shell() {
+  ensure_cache_dirs
+  if ! docker image inspect "$image" >/dev/null 2>&1; then
+    build_image
+  fi
+  docker run \
+    --rm \
+    --interactive \
+    --tty \
+    --platform "$platform" \
+    --volume "$repo_root:/work" \
+    --volume "$cache_dir:/cache" \
+    --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
+    --volume "$cache_dir/apk:/var/cache/apk" \
+    --workdir /work \
+    --env MOZCONFIG=/work/docker/waterfox-musl/mozconfig.stage1 \
+    --env WFX_SKIP_MACH_OPTIONAL=1 \
+    --env WFX_JOBS="${WFX_JOBS:-4}" \
+    --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
+    "$image" \
+    bash
+}
+
+edge_versions() {
+  run_in_image sh -euc '
+apk update --cache-dir /var/cache/apk >/dev/null
+packages="
+clang22
+lld22
+llvm22
+rust
+cargo
+cbindgen
+sccache
+ninja-build
+mold
+samurai
+meson
+cmake
+pkgconf
+python3
+nodejs-current
+gtk+3.0
+cairo
+glib
+pango
+gdk-pixbuf
+harfbuzz
+fontconfig
+freetype
+libpng
+libjpeg-turbo
+pixman
+wayland
+wayland-protocols
+libxkbcommon
+libepoxy
+mesa
+expat
+libffi
+pcre2
+zlib
+fribidi
+shared-mime-info
+at-spi2-core
+libdrm
+libinput
+libseat
+seatd
+libevdev
+mtdev
+eudev-libs
+hwdata
+libdisplay-info
+libliftoff
+mimalloc2
+cage
+wlroots0.20
+qemu-system-aarch64
+qemu-img
+"
+printf 'alpine='
+cat /etc/alpine-release
+printf 'arch='
+apk --print-arch
+for package in $packages; do
+  apk search -x "$package" | tail -n 1
+done
+'
+}
+
+reserved() {
+  printf '%s\n' "not implemented in tranche 1; see PLAN.md for the staged design" >&2
+  exit 2
+}
+
+command=${1:-}
+case "$command" in
+  image)
+    ensure_cache_dirs
+    build_image
+    ;;
+  versions)
+    edge_versions
+    ;;
+  toolchain-report)
+    run_in_image wfx-toolchain-report
+    ;;
+  shell)
+    run_shell
+    ;;
+  sysroot)
+    run_in_image /work/docker/waterfox-musl/build-sysroot build-initial
+    ;;
+  sysroot-smoke)
+    run_in_image /work/docker/waterfox-musl/build-sysroot smoke
+    ;;
+  check)
+    run_in_image /work/docker/waterfox-musl/build-sysroot scan
+    ;;
+  configure-check)
+    run_in_image /work/docker/waterfox-musl/check-config
+    ;;
+  configure)
+    run_in_image sh -euc './mach configure && /work/docker/waterfox-musl/check-config'
+    ;;
+  build)
+    run_in_image sh -euc './mach configure && /work/docker/waterfox-musl/check-config && ./mach build'
+    ;;
+  package)
+    run_in_image ./mach package
+    ;;
+  smoke-headless|qemu-image|qemu-run)
+    reserved
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

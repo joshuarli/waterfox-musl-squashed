@@ -272,8 +272,17 @@ def midir_linux_support(target):
     )
 
 
-@depends(target, midir_linux_support)
-def midir_support(target, midir_linux_support):
+option(
+    "--enable-webmidi-midir",
+    default=True,
+    help="{Enable|Disable} the midir-based Web MIDI platform backend",
+)
+
+
+@depends(target, midir_linux_support, "--enable-webmidi-midir")
+def midir_support(target, midir_linux_support, enable_midir):
+    if not enable_midir:
+        return None
     if target.os in ("WINNT", "OSX") or midir_linux_support:
         return True
 
@@ -314,6 +323,7 @@ option(
         "alsa",
         "audiounit",
         "jack",
+        "none",
         "opensl",
         "oss",
         "pulseaudio",
@@ -324,6 +334,17 @@ option(
     default=audio_backends_default,
     help="{Enable|Disable} various cubeb backends",
 )
+
+
+@depends("--enable-audio-backends")
+def audio_backends_none(values):
+    has_none = any("none" in value for value in values)
+    if has_none and len(values) != 1:
+        die("Cannot combine 'none' with other audio backends")
+    return has_none or None
+
+
+set_config("MOZ_AUDIO_BACKENDS_NONE", audio_backends_none)
 
 
 @depends("--enable-audio-backends", target)
@@ -452,12 +473,12 @@ def enable_alsa_option(enable_alsa):
     return enable_alsa
 
 
-@depends(enable_alsa_option, midir_linux_support)
-def enable_alsa_or_midir_linux_support(alsa_enabled, midir_linux_support):
-    return alsa_enabled or midir_linux_support
+@depends(enable_alsa_option, midir_support)
+def enable_alsa_or_midir_support(alsa_enabled, midir_support):
+    return alsa_enabled or midir_support
 
 
-pkg_check_modules("MOZ_ALSA", "alsa", when=enable_alsa_or_midir_linux_support)
+pkg_check_modules("MOZ_ALSA", "alsa", when=enable_alsa_or_midir_support)
 
 set_config("MOZ_ALSA", True, when="--enable-alsa")
 set_define("MOZ_ALSA", True, when="--enable-alsa")

@@ -1897,10 +1897,10 @@ class GMPSandboxPolicy : public SandboxPolicyCommon {
         return Allow();
       case __NR_sched_get_priority_min:
       case __NR_sched_get_priority_max:
+      case __NR_sched_setscheduler:
         return Allow();
       case __NR_sched_getparam:
-      case __NR_sched_getscheduler:
-      case __NR_sched_setscheduler: {
+      case __NR_sched_getscheduler: {
         Arg<pid_t> pid(0);
         return If(pid == 0, Allow()).Else(Trap(SchedTrap, nullptr));
       }
@@ -2090,12 +2090,15 @@ class RDDSandboxPolicy final : public SandboxPolicyCommon {
       case __NR_sched_getparam:
       case __NR_sched_setparam:
       case __NR_sched_getscheduler:
-      case __NR_sched_setscheduler:
       case __NR_sched_getattr:
       case __NR_sched_setattr: {
         Arg<pid_t> pid(0);
         return If(pid == 0, Allow()).Else(Trap(SchedTrap, nullptr));
       }
+
+      // sched_setscheduler gets special treatment here (bug 1657849):
+      case __NR_sched_setscheduler:
+        return Allow();
 
         // The priority bounds are also used, sometimes (bug 1838675):
       case __NR_sched_get_priority_min:

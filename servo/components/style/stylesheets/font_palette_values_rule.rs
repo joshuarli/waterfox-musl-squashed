@@ -12,8 +12,8 @@ use crate::gecko_bindings::{
     bindings::Gecko_AppendPaletteValueHashEntry,
     bindings::{Gecko_SetFontPaletteBase, Gecko_SetFontPaletteOverride},
     structs::gfx::FontPaletteValueSet,
-    structs::gfx::FontPaletteValueSet_PaletteValues_kDark,
-    structs::gfx::FontPaletteValueSet_PaletteValues_kLight,
+    structs::PaletteValues_kDark as FontPaletteValueSet_PaletteValues_kDark,
+    structs::PaletteValues_kLight as FontPaletteValueSet_PaletteValues_kLight,
 };
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};

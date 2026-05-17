@@ -21,7 +21,8 @@
 
 // stat64 and lstat64 are deprecated on OS X. Normal stat and lstat are
 // 64-bit by default on OS X 10.6+.
-#if defined(HAVE_STAT64) && defined(HAVE_LSTAT64) && !defined(XP_DARWIN)
+#if defined(__GLIBC__) && defined(HAVE_STAT64) && defined(HAVE_LSTAT64) && \
+    !defined(XP_DARWIN)
 #  define STAT stat64
 #  define LSTAT lstat64
 #  define HAVE_STATS64 1

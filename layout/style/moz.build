@@ -98,6 +98,7 @@ EXPORTS.mozilla += [
     "PseudoStyleType.h",
     "RustCell.h",
     "ServoBindings.h",
+    "ServoBindingsPrivate.h",
     "ServoBindingTypes.h",
     "ServoBoxedTypeList.h",
     "ServoComputedData.h",

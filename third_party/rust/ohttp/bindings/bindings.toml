@@ -45,6 +45,7 @@ types = [
     "SECItem",
     "SECItemArray",
     "SECOidData",
+    "SECOidDataStr",
 ]
 functions = [
     "PK11_AEADOp",
@@ -98,6 +99,15 @@ opaque = [
     "PK11SymKey",
     "SECKEYPrivateKey",
     "SECKEYPublicKey",
+]
+exclude = [
+    "SECOidData",
+    "SECOidDataStr",
+    "SECItem",
+    "SECItemArray",
+    "SECItemStr",
+    "SECItemArrayStr",
+    "SECItemType",
 ]
 variables = [
     "CK_INVALID_HANDLE",

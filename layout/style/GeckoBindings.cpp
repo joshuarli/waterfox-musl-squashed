@@ -8,6 +8,8 @@
 
 #include "mozilla/GeckoBindings.h"
 
+#include <algorithm>
+
 #include "ChildIterator.h"
 #include "ErrorReporter.h"
 #include "gfxFontFeatures.h"
@@ -112,6 +114,271 @@ static const nsFont& ThreadSafeGetDefaultVariableFont(const Document& aDocument,
                                                       nsAtom* aLanguage) {
   return ThreadSafeGetLangGroupFontPrefs(aDocument, aLanguage)
       ->mDefaultVariableFont;
+}
+
+const nsINode* Gecko_Content_AsNode(const nsIContent* aContent) {
+  return aContent;
+}
+
+const nsINode* Gecko_Document_AsNode(const Document* aDocument) {
+  return aDocument;
+}
+
+bool Gecko_Document_IsHTMLDocument(const Document* aDocument) {
+  return aDocument->IsHTMLDocument();
+}
+
+nsCompatibility Gecko_Document_CompatibilityMode(const Document* aDocument) {
+  return aDocument->GetCompatibilityMode();
+}
+
+uint64_t Gecko_Document_State(const Document* aDocument) {
+  return aDocument->State().GetInternalValue();
+}
+
+nsPresContext* Gecko_Document_PresContext(const Document* aDocument) {
+  return aDocument->GetPresContext();
+}
+
+nsIURI* Gecko_Document_URI(const Document* aDocument) {
+  return aDocument->GetDocumentURI();
+}
+
+bool Gecko_Document_ChromeRulesEnabled(const Document* aDocument) {
+  return aDocument->ChromeRulesEnabled();
+}
+
+const NodeInfo* Gecko_Node_NodeInfo(const nsINode* aNode) {
+  return aNode->NodeInfo();
+}
+
+const nsINode* Gecko_Node_Parent(const nsINode* aNode) {
+  return aNode->GetParentNode();
+}
+
+const nsIContent* Gecko_Node_FirstChild(const nsINode* aNode) {
+  return aNode->GetFirstChild();
+}
+
+const nsIContent* Gecko_Node_NextSibling(const nsINode* aNode) {
+  return aNode->GetNextSibling();
+}
+
+const nsIContent* Gecko_Node_PreviousSibling(const nsINode* aNode) {
+  return aNode->GetPreviousSibling();
+}
+
+const Document* Gecko_Node_OwnerDoc(const nsINode* aNode) {
+  return aNode->OwnerDoc();
+}
+
+uint32_t Gecko_Node_Flags(const nsINode* aNode) { return aNode->GetFlags(); }
+
+void Gecko_Node_SetFlags(const nsINode* aNode, uint32_t aFlags) {
+  const_cast<nsINode*>(aNode)->SetFlags(aFlags);
+}
+
+void Gecko_Node_UnsetFlags(const nsINode* aNode, uint32_t aFlags) {
+  const_cast<nsINode*>(aNode)->UnsetFlags(aFlags);
+}
+
+uint32_t Gecko_Node_SelectorFlags(const nsINode* aNode) {
+  return uint32_t(aNode->GetSelectorFlags());
+}
+
+void Gecko_Node_SetSelectorFlags(const nsINode* aNode, uint32_t aFlags) {
+  const_cast<nsINode*>(aNode)->ServoAddSelectorFlags(aFlags);
+}
+
+bool Gecko_Node_GetBoolFlag(const nsINode* aNode, uint32_t aFlag) {
+  return aNode->ServoGetBoolFlag(aFlag);
+}
+
+const nsINode* Gecko_ShadowRoot_AsNode(const ShadowRoot* aShadowRoot) {
+  return aShadowRoot;
+}
+
+const Element* Gecko_ShadowRoot_Host(const ShadowRoot* aShadowRoot) {
+  return aShadowRoot->Host();
+}
+
+const StyleAuthorStyles* Gecko_ShadowRoot_Styles(
+    const ShadowRoot* aShadowRoot) {
+  return aShadowRoot->GetServoStyles();
+}
+
+const nsTArray<const Element*>* Gecko_ShadowRoot_Parts(
+    const ShadowRoot* aShadowRoot) {
+  return &aShadowRoot->Parts();
+}
+
+ServoNodeData* Gecko_Element_GetServoData(const Element* aElement) {
+  return aElement->ServoData();
+}
+
+void Gecko_Element_SetServoData(const Element* aElement, ServoNodeData* aData) {
+  const_cast<Element*>(aElement)->SetServoDataForServo(aData);
+}
+
+const AttrArray::InternalAttr* Gecko_Element_Attrs(const Element* aElement,
+                                                   uint32_t* aLength) {
+  return aElement->GetAttrs().ServoAttrs(aLength);
+}
+
+const FragmentOrElement::nsDOMSlots* Gecko_Element_DOMSlots(
+    const Element* aElement) {
+  return aElement->ServoGetExistingDOMSlots();
+}
+
+const FragmentOrElement::nsExtendedDOMSlots* Gecko_Element_ExtendedDOMSlots(
+    const Element* aElement) {
+  return aElement->ServoGetExistingExtendedDOMSlots();
+}
+
+uint64_t Gecko_Element_State(const Element* aElement) {
+  return aElement->State().GetInternalValue();
+}
+
+uint64_t Gecko_Element_StyleState(const Element* aElement) {
+  return aElement->StyleState().GetInternalValue();
+}
+
+const ShadowRoot* Gecko_Element_ShadowRoot(const Element* aElement) {
+  return aElement->GetShadowRoot();
+}
+
+const ShadowRoot* Gecko_Element_ContainingShadow(const Element* aElement) {
+  return aElement->GetContainingShadow();
+}
+
+const Element* Gecko_Element_AssignedSlot(const Element* aElement) {
+  return aElement->GetAssignedSlot();
+}
+
+const StyleLockedDeclarationBlock* Gecko_Element_SMILOverrideDeclarationBlock(
+    const Element* aElement) {
+  DeclarationBlock* declaration =
+      const_cast<Element*>(aElement)->GetSMILOverrideStyleDeclaration();
+  return declaration ? declaration->Raw() : nullptr;
+}
+
+uint32_t Gecko_AttrValue_AtomCount(const nsAttrValue* aValue) {
+  return aValue->GetAtomCount();
+}
+
+nsAtom* Gecko_AttrValue_AtomAt(const nsAttrValue* aValue, uint32_t aIndex) {
+  return aValue->AtomAt(int32_t(aIndex));
+}
+
+uintptr_t Gecko_URLExtraData_SharedCount() {
+  return size_t(BuiltInStyleSheet::Count);
+}
+
+URLExtraData* Gecko_URLExtraData_Shared(uintptr_t aIndex) {
+  MOZ_ASSERT(aIndex < size_t(BuiltInStyleSheet::Count));
+  return URLExtraData::sShared[aIndex].get();
+}
+
+intptr_t Gecko_URLExtraData_SharedIndex(const URLExtraData* aData) {
+  for (uintptr_t i = 0; i < size_t(BuiltInStyleSheet::Count); ++i) {
+    if (URLExtraData::sShared[i].get() == aData) {
+      return intptr_t(i);
+    }
+  }
+  return -1;
+}
+
+bool Gecko_PresContext_IsPrintPreview(const nsPresContext* aPresContext) {
+  return aPresContext->IsPrintPreview();
+}
+
+nsAtom* Gecko_PresContext_Medium(const nsPresContext* aPresContext) {
+  return const_cast<nsAtom*>(aPresContext->Medium());
+}
+
+static void SetOutSize(nscoord aWidth, nscoord aHeight, nscoord* aOutWidth,
+                       nscoord* aOutHeight) {
+  *aOutWidth = aWidth;
+  *aOutHeight = aHeight;
+}
+
+static void SetPageSizeMinusDefaultMargin(const nsPresContext* aPresContext,
+                                          nscoord* aOutWidth,
+                                          nscoord* aOutHeight) {
+  MOZ_ASSERT(aPresContext->IsRootPaginatedDocument());
+  const nsSize area = aPresContext->GetPageSize();
+  const nsMargin& margin = aPresContext->GetDefaultPageMargin();
+  SetOutSize(std::max(area.width - margin.left - margin.right, 0),
+             std::max(area.height - margin.top - margin.bottom, 0), aOutWidth,
+             aOutHeight);
+}
+
+void Gecko_PresContext_AuViewportSize(const nsPresContext* aPresContext,
+                                      nscoord* aOutWidth,
+                                      nscoord* aOutHeight) {
+  if (aPresContext->IsRootPaginatedDocument()) {
+    SetPageSizeMinusDefaultMargin(aPresContext, aOutWidth, aOutHeight);
+    return;
+  }
+  const nsRect area = aPresContext->GetVisibleArea();
+  SetOutSize(area.width, area.height, aOutWidth, aOutHeight);
+}
+
+void Gecko_PresContext_AuViewportSizeForViewportUnitResolution(
+    const nsPresContext* aPresContext, uint8_t aVariant, nscoord* aOutWidth,
+    nscoord* aOutHeight) {
+  if (aPresContext->IsRootPaginatedDocument()) {
+    SetPageSizeMinusDefaultMargin(aPresContext, aOutWidth, aOutHeight);
+    return;
+  }
+
+  if (aVariant == 0) {
+    const nsSize size = aPresContext->GetSizeForViewportUnits();
+    SetOutSize(size.width, size.height, aOutWidth, aOutHeight);
+    return;
+  }
+
+  const nsRect area = aPresContext->GetVisibleArea();
+  if (aVariant == 2) {
+    SetOutSize(area.width,
+               area.height + aPresContext->GetDynamicToolbarMaxHeight().value *
+                                 aPresContext->AppUnitsPerDevPixel(),
+               aOutWidth, aOutHeight);
+    return;
+  }
+  if (aVariant == 3) {
+    const int32_t toolbarDelta =
+        aPresContext->GetDynamicToolbarMaxHeight().value -
+        aPresContext->GetDynamicToolbarHeight().value;
+    SetOutSize(area.width,
+               area.height + toolbarDelta * aPresContext->AppUnitsPerDevPixel(),
+               aOutWidth, aOutHeight);
+    return;
+  }
+  SetOutSize(area.width, area.height, aOutWidth, aOutHeight);
+}
+
+int32_t Gecko_PresContext_AppUnitsPerDevPixel(
+    const nsPresContext* aPresContext) {
+  return aPresContext->AppUnitsPerDevPixel();
+}
+
+int32_t Gecko_PresContext_AppUnitsPerDevPixelAtUnitFullZoom(
+    const nsPresContext* aPresContext) {
+  return aPresContext->DeviceContext()->AppUnitsPerDevPixelAtUnitFullZoom();
+}
+
+float Gecko_PresContext_OverrideDPPX(const nsPresContext* aPresContext) {
+  return aPresContext->GetOverrideDPPX();
+}
+
+StyleForcedColors Gecko_PresContext_ForcedColors(
+    const nsPresContext* aPresContext) {
+  return aPresContext->ForcedColors();
+}
+
+float Gecko_PresContext_TextZoom(const nsPresContext* aPresContext) {
+  return aPresContext->TextZoom();
 }
 
 /*

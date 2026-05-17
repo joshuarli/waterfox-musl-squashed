@@ -28,7 +28,7 @@ use euclid::default::Size2D;
 use euclid::{Scale, SideOffsets2D};
 use servo_arc::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
-use std::{cmp, fmt};
+use std::fmt;
 use style_traits::{CSSPixel, DevicePixel};
 
 /// The `Device` in Gecko wraps a pres context, has a default values computed,
@@ -80,7 +80,7 @@ impl fmt::Debug for Device {
 
         let mut doc_uri = nsCString::new();
         unsafe {
-            bindings::Gecko_nsIURI_Debug((*self.document()).mDocumentURI.raw(), &mut doc_uri)
+            bindings::Gecko_nsIURI_Debug(bindings::Gecko_Document_URI(self.document()), &mut doc_uri)
         };
 
         f.debug_struct("Device")
@@ -195,7 +195,7 @@ impl Device {
 
     /// The quirks mode of the document.
     pub fn quirks_mode(&self) -> QuirksMode {
-        self.document().mCompatMode.into()
+        unsafe { bindings::Gecko_Document_CompatibilityMode(self.document()).into() }
     }
 
     /// Sets the body text color for the "inherit color from body" quirk.
@@ -290,14 +290,7 @@ impl Device {
     /// Gets the pres context associated with this document.
     #[inline]
     pub fn pres_context(&self) -> Option<&structs::nsPresContext> {
-        unsafe {
-            self.document()
-                .mPresShell
-                .as_ref()?
-                .mPresContext
-                .mRawPtr
-                .as_ref()
-        }
+        unsafe { bindings::Gecko_Document_PresContext(self.document()).as_ref() }
     }
 
     /// Gets the preference stylesheet prefs for our document.
@@ -346,7 +339,7 @@ impl Device {
             Some(pc) => pc,
             None => return false,
         };
-        pc.mType == structs::nsPresContext_nsPresContextType_eContext_PrintPreview
+        unsafe { bindings::Gecko_PresContext_IsPrintPreview(pc) }
     }
 
     /// Returns the current media type of the device.
@@ -356,41 +349,28 @@ impl Device {
             None => return MediaType::screen(),
         };
 
-        // Gecko allows emulating random media with mMediaEmulationData.mMedium.
-        let medium_to_use = if !pc.mMediaEmulationData.mMedium.mRawPtr.is_null() {
-            pc.mMediaEmulationData.mMedium.mRawPtr
-        } else {
-            pc.mMedium as *const structs::nsAtom as *mut _
-        };
+        let medium_to_use = unsafe { bindings::Gecko_PresContext_Medium(pc) };
 
         MediaType(CustomIdent(unsafe { Atom::from_raw(medium_to_use) }))
     }
 
-    // It may make sense to account for @page rule margins here somehow, however
-    // it's not clear how that'd work, see:
-    // https://github.com/w3c/csswg-drafts/issues/5437
-    fn page_size_minus_default_margin(&self, pc: &structs::nsPresContext) -> Size2D<Au> {
-        debug_assert!(pc.mIsRootPaginatedDocument() != 0);
-        let area = &pc.mPageSize;
-        let margin = &pc.mDefaultPageMargin;
-        let width = area.width - margin.left - margin.right;
-        let height = area.height - margin.top - margin.bottom;
-        Size2D::new(Au(cmp::max(width, 0)), Au(cmp::max(height, 0)))
-    }
-
-    /// Returns the current viewport size in app units.
-    pub fn au_viewport_size(&self) -> Size2D<Au> {
+    fn size_from_pres_context(
+        &self,
+        callback: unsafe extern "C" fn(*const structs::nsPresContext, *mut i32, *mut i32),
+    ) -> Size2D<Au> {
         let pc = match self.pres_context() {
             Some(pc) => pc,
             None => return Size2D::new(Au(0), Au(0)),
         };
+        let mut width = 0;
+        let mut height = 0;
+        unsafe { callback(pc, &mut width, &mut height) };
+        Size2D::new(Au(width), Au(height))
+    }
 
-        if pc.mIsRootPaginatedDocument() != 0 {
-            return self.page_size_minus_default_margin(pc);
-        }
-
-        let area = &pc.mVisibleArea;
-        Size2D::new(Au(area.width), Au(area.height))
+    /// Returns the current viewport size in app units.
+    pub fn au_viewport_size(&self) -> Size2D<Au> {
+        self.size_from_pres_context(bindings::Gecko_PresContext_AuViewportSize)
     }
 
     /// Returns the current viewport size in app units, recording that it's been
@@ -400,54 +380,31 @@ impl Device {
         variant: ViewportVariant,
     ) -> Size2D<Au> {
         self.used_viewport_size.store(true, Ordering::Relaxed);
+        if matches!(variant, ViewportVariant::Dynamic) {
+            self.used_dynamic_viewport_size
+                .store(true, Ordering::Relaxed);
+        }
         let pc = match self.pres_context() {
             Some(pc) => pc,
             None => return Size2D::new(Au(0), Au(0)),
         };
-
-        if pc.mIsRootPaginatedDocument() != 0 {
-            return self.page_size_minus_default_margin(pc);
-        }
-
-        match variant {
-            ViewportVariant::UADefault => {
-                let size = &pc.mSizeForViewportUnits;
-                Size2D::new(Au(size.width), Au(size.height))
-            },
-            ViewportVariant::Small => {
-                let size = &pc.mVisibleArea;
-                Size2D::new(Au(size.width), Au(size.height))
-            },
-            ViewportVariant::Large => {
-                let size = &pc.mVisibleArea;
-                // Looks like IntCoordTyped is treated as if it's u32 in Rust.
-                debug_assert!(
-                    /* pc.mDynamicToolbarMaxHeight >=0 && */
-                    pc.mDynamicToolbarMaxHeight < i32::MAX as u32
-                );
-                Size2D::new(
-                    Au(size.width),
-                    Au(size.height +
-                        pc.mDynamicToolbarMaxHeight as i32 * pc.mCurAppUnitsPerDevPixel),
-                )
-            },
-            ViewportVariant::Dynamic => {
-                self.used_dynamic_viewport_size
-                    .store(true, Ordering::Relaxed);
-                let size = &pc.mVisibleArea;
-                // Looks like IntCoordTyped is treated as if it's u32 in Rust.
-                debug_assert!(
-                    /* pc.mDynamicToolbarHeight >=0 && */
-                    pc.mDynamicToolbarHeight < i32::MAX as u32
-                );
-                Size2D::new(
-                    Au(size.width),
-                    Au(size.height +
-                        (pc.mDynamicToolbarMaxHeight - pc.mDynamicToolbarHeight) as i32 *
-                            pc.mCurAppUnitsPerDevPixel),
-                )
-            },
-        }
+        let mut width = 0;
+        let mut height = 0;
+        let variant = match variant {
+            ViewportVariant::UADefault => 0,
+            ViewportVariant::Small => 1,
+            ViewportVariant::Large => 2,
+            ViewportVariant::Dynamic => 3,
+        };
+        unsafe {
+            bindings::Gecko_PresContext_AuViewportSizeForViewportUnitResolution(
+                pc,
+                variant,
+                &mut width,
+                &mut height,
+            )
+        };
+        Size2D::new(Au(width), Au(height))
     }
 
     /// Returns whether we ever looked up the viewport size of the Device.
@@ -473,7 +430,7 @@ impl Device {
     /// Returns the number of app units per device pixel we're using currently.
     pub fn app_units_per_device_pixel(&self) -> i32 {
         match self.pres_context() {
-            Some(pc) => pc.mCurAppUnitsPerDevPixel,
+            Some(pc) => unsafe { bindings::Gecko_PresContext_AppUnitsPerDevPixel(pc) },
             None => AU_PER_PX,
         }
     }
@@ -481,7 +438,9 @@ impl Device {
     /// Returns app units per pixel at 1x full-zoom.
     fn app_units_per_device_pixel_at_unit_full_zoom(&self) -> i32 {
         match self.pres_context() {
-            Some(pc) => unsafe { (*pc.mDeviceContext.mRawPtr).mAppUnitsPerDevPixelAtUnitFullZoom },
+            Some(pc) => unsafe {
+                bindings::Gecko_PresContext_AppUnitsPerDevPixelAtUnitFullZoom(pc)
+            },
             None => AU_PER_PX,
         }
     }
@@ -499,11 +458,12 @@ impl Device {
             None => return Scale::new(1.),
         };
 
-        if pc.mMediaEmulationData.mDPPX > 0.0 {
-            return Scale::new(pc.mMediaEmulationData.mDPPX);
+        let override_dppx = unsafe { bindings::Gecko_PresContext_OverrideDPPX(pc) };
+        if override_dppx > 0.0 {
+            return Scale::new(override_dppx);
         }
 
-        let au_per_dpx = pc.mCurAppUnitsPerDevPixel as f32;
+        let au_per_dpx = unsafe { bindings::Gecko_PresContext_AppUnitsPerDevPixel(pc) } as f32;
         let au_per_px = AU_PER_PX as f32;
         Scale::new(au_per_px / au_per_dpx)
     }
@@ -511,7 +471,9 @@ impl Device {
     /// Returns whether document colors are enabled.
     #[inline]
     pub fn forced_colors(&self) -> ForcedColors {
-        self.pres_context().map_or(ForcedColors::None, |pc| pc.mForcedColors)
+        self.pres_context().map_or(ForcedColors::None, |pc| unsafe {
+            bindings::Gecko_PresContext_ForcedColors(pc)
+        })
     }
 
     /// Computes a system color and returns it as an nscolor.
@@ -550,7 +512,7 @@ impl Device {
             Some(pc) => pc,
             None => return 1.,
         };
-        pc.mTextZoom
+        unsafe { bindings::Gecko_PresContext_TextZoom(pc) }
     }
 
     /// Applies text zoom to a font-size or line-height value (see nsStyleFont::ZoomText).
@@ -594,6 +556,6 @@ impl Device {
     /// stylesheets (and thus chrome:// documents).
     #[inline]
     pub fn chrome_rules_enabled_for_document(&self) -> bool {
-        self.document().mChromeRulesEnabled()
+        unsafe { bindings::Gecko_Document_ChromeRulesEnabled(self.document()) }
     }
 }

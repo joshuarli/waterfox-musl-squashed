@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl}
+config=$objdir/config.status
+log=$objdir/config.log
+compile_commands=$objdir/clangd/compile_commands.json
+
+fail() {
+  printf 'wfx config check failed: %s\n' "$*" >&2
+  exit 1
+}
+
+require_file() {
+  [ -f "$1" ] || fail "missing $1"
+}
+
+require_config() {
+  local key=$1 value=$2
+  grep -Eq "^[[:space:]]*'$key': '$value'," "$config" ||
+    fail "expected $key=$value in config.status"
+}
+
+reject_config_key() {
+  local key=$1
+  if grep -Eq "^[[:space:]]*'$key':" "$config"; then
+    fail "unexpected $key in config.status"
+  fi
+}
+
+require_file "$config"
+require_file "$log"
+
+require_config MOZ_WAYLAND 1
+require_config MOZ_AUDIO_BACKENDS_NONE 1
+require_config MOZ_MIMALLOC_REPLACE 1
+require_config WFX_MIMALLOC_PREFIX /opt/wfx/sysroot
+
+reject_config_key MOZ_X11
+reject_config_key MOZ_ENABLE_DBUS
+reject_config_key NECKO_WIFI
+reject_config_key MOZ_WEBRTC
+reject_config_key MOZ_ALSA
+reject_config_key MOZ_PULSEAUDIO
+reject_config_key MOZ_SYSTEM_PIPEWIRE
+reject_config_key MOZ_SYNTH_SPEECHD
+reject_config_key MOZ_WEBMIDI_MIDIR_IMPL
+
+grep -Eq "^[[:space:]]*'CC_TYPE': CompilerType\\('clang'\\)," "$config" ||
+  fail "target C compiler is not clang"
+grep -Eq "^[[:space:]]*'HOST_CC_TYPE': CompilerType\\('clang'\\)," "$config" ||
+  fail "host C compiler is not clang"
+grep -Eq "^[[:space:]]*'_CC': '/usr/lib/llvm22/bin/clang-22'," "$config" ||
+  fail "target C compiler is not clang-22"
+grep -Eq "^[[:space:]]*'_CXX': '/usr/bin/clang\\+\\+-22'," "$config" ||
+  fail "target C++ compiler is not clang++-22"
+grep -Eq "^[[:space:]]*'RELRHACK_LINKER': 'ld\\.mold'," "$config" ||
+  fail "mold linker was not selected"
+
+if grep -Eq 'checking (MOZ_ALSA|MOZ_PULSEAUDIO|MOZ_DBUS|MOZ_PIPEWIRE)|checking for (alsa|libpulse|dbus-1|libpipewire)' "$log"; then
+  fail "audio, DBus, or PipeWire pkg-config check ran"
+fi
+
+if [ -f "$compile_commands" ] &&
+   grep -Eq '(^|[/" ])gcc([ "./-]|$)|(^|[/" ])g\+\+([ "./-]|$)' "$compile_commands"; then
+  fail "compile_commands.json contains gcc or g++"
+fi

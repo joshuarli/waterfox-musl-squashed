@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use super::PYTHON;
-use bindgen::{Builder, CodegenConfig};
+use bindgen::{Builder, CodegenConfig, FieldVisibilityKind};
 use regex::Regex;
 use std::cmp;
 use std::collections::HashSet;
@@ -125,7 +125,11 @@ impl BuilderExt for Builder {
         // them.
         let mut builder = Builder::default()
             .size_t_is_usize(true)
-            .disable_untagged_union();
+            .disable_untagged_union()
+            .respect_cxx_access_specs(false)
+            .default_visibility(FieldVisibilityKind::Public)
+            .clang_arg("-include")
+            .clang_arg("sstream");
 
         let rustfmt_path = env::var_os("RUSTFMT")
             .filter(|p| !p.is_empty())
@@ -139,6 +143,7 @@ impl BuilderExt for Builder {
         }
 
         builder = builder.include(add_include("mozilla-config.h"));
+        builder = builder.include(add_include("mozilla/HashFunctions.h"));
 
         if env::var("CARGO_FEATURE_GECKO_DEBUG").is_ok() {
             builder = builder.clang_arg("-DDEBUG=1").clang_arg("-DJS_DEBUG=1");
@@ -169,15 +174,11 @@ fn write_binding_file(builder: Builder, file: &str, fixups: &[Fixup]) {
             return;
         }
     }
-    let command_line_opts = builder.command_line_flags();
     let result = builder.generate();
     let mut result = match result {
         Ok(bindings) => bindings.to_string(),
-        Err(_) => {
-            panic!(
-                "Failed to generate bindings, flags: {:?}",
-                command_line_opts
-            );
+        Err(e) => {
+            panic!("Failed to generate bindings: {e:?}");
         },
     };
 
@@ -268,8 +269,12 @@ impl<'a> BuilderWithConfig<'a> {
 }
 
 fn generate_structs() {
+    let private_bindings_header = mozbuild::TOPSRCDIR.join("layout/style/ServoBindingsPrivate.h");
+    update_last_modified(&private_bindings_header);
+
     let builder = Builder::get_initial_builder()
         .enable_cxx_namespaces()
+        .header(private_bindings_header.to_str().unwrap())
         .with_codegen_config(CodegenConfig::TYPES | CodegenConfig::VARS | CodegenConfig::FUNCTIONS);
     let mut fixups = vec![];
     let builder = BuilderWithConfig::new(builder, CONFIG["structs"].as_table().unwrap())

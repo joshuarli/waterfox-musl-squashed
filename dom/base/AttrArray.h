@@ -184,6 +184,12 @@ class AttrArray {
     nsAttrValue mValue;
   };
 
+  const InternalAttr* ServoAttrs(uint32_t* aLength) const {
+    auto attrs = Attrs();
+    *aLength = attrs.Length();
+    return attrs.Elements();
+  }
+
   AttrArray(const AttrArray& aOther) = delete;
   AttrArray& operator=(const AttrArray& aOther) = delete;
 

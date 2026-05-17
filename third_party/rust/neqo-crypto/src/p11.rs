@@ -29,6 +29,58 @@ use crate::{
     reason = "For included bindgen code."
 )]
 mod nss_p11 {
+    pub mod SECItemType {
+        pub type Type = ::std::os::raw::c_uint;
+
+        pub const siBuffer: Type = 0;
+        pub const siClearDataBuffer: Type = 1;
+        pub const siCipherDataBuffer: Type = 2;
+        pub const siDERCertBuffer: Type = 3;
+        pub const siEncodedCertBuffer: Type = 4;
+        pub const siDERNameBuffer: Type = 5;
+        pub const siEncodedNameBuffer: Type = 6;
+        pub const siAsciiNameString: Type = 7;
+        pub const siAsciiString: Type = 8;
+        pub const siDEROID: Type = 9;
+        pub const siUnsignedInteger: Type = 10;
+        pub const siUTCTime: Type = 11;
+        pub const siGeneralizedTime: Type = 12;
+        pub const siVisibleString: Type = 13;
+        pub const siUTF8String: Type = 14;
+        pub const siBMPString: Type = 15;
+    }
+
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone)]
+    pub struct SECItemStr {
+        pub type_: SECItemType::Type,
+        pub data: *mut ::std::os::raw::c_uchar,
+        pub len: ::std::os::raw::c_uint,
+    }
+
+    pub type SECItem = SECItemStr;
+
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone)]
+    pub struct SECItemArrayStr {
+        pub items: *mut SECItem,
+        pub len: ::std::os::raw::c_uint,
+    }
+
+    pub type SECItemArray = SECItemArrayStr;
+
+    pub type SECOidData = SECOidDataStr;
+
+    #[repr(C)]
+    #[derive(Debug, Copy, Clone)]
+    pub struct SECOidDataStr {
+        pub oid: SECItem,
+        pub offset: SECOidTag::Type,
+        pub desc: *const ::std::os::raw::c_char,
+        pub mechanism: ::std::os::raw::c_ulong,
+        pub supportedExtension: SECSupportExtenTag::Type,
+    }
+
     include!(concat!(env!("OUT_DIR"), "/nss_p11.rs"));
 }
 

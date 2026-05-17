@@ -14,10 +14,26 @@ header_template = """#pragma GCC system_header
 include_next_template = "#include_next <{header}>"
 
 
+def is_case_insensitive(path):
+    probe = os.path.join(path, ".moz-case-probe")
+    with open(probe, "w"):
+        pass
+    try:
+        return os.path.exists(probe.upper())
+    finally:
+        os.unlink(probe)
+
+
 # The 'unused' arg is the output file from the file_generate action. We actually
 # generate all the files in header_list
 def gen_wrappers(unused, outdir, *header_list):
+    seen_casefold = set()
+    skip_case_duplicates = is_case_insensitive(outdir)
     for header in header_list:
+        header_casefold = header.casefold()
+        if skip_case_duplicates and header_casefold in seen_casefold:
+            continue
+        seen_casefold.add(header_casefold)
         with FileAvoidWrite(os.path.join(outdir, header)) as f:
             includes = include_next_template.format(header=header)
             if header == "wayland-util.h" or header == "pipewire/pipewire.h":

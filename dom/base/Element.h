@@ -606,6 +606,8 @@ class Element : public FragmentOrElement {
   }
 
   bool HasServoData() const { return !!mServoData.Get(); }
+  ServoNodeData* ServoData() const { return mServoData.Get(); }
+  void SetServoDataForServo(ServoNodeData* aData) { mServoData.Set(aData); }
 
   void ClearServoData() { ClearServoData(GetComposedDoc()); }
   void ClearServoData(Document* aDocument);

@@ -77,6 +77,75 @@ void Gecko_Snapshot_DebugListAttributes(const mozilla::ServoElementSnapshot*,
 
 bool Gecko_IsSignificantChild(const nsINode*, bool whitespace_is_significant);
 
+const nsINode* Gecko_Content_AsNode(const nsIContent*);
+const nsINode* Gecko_Document_AsNode(const mozilla::dom::Document*);
+bool Gecko_Document_IsHTMLDocument(const mozilla::dom::Document*);
+nsCompatibility Gecko_Document_CompatibilityMode(const mozilla::dom::Document*);
+uint64_t Gecko_Document_State(const mozilla::dom::Document*);
+nsPresContext* Gecko_Document_PresContext(const mozilla::dom::Document*);
+nsIURI* Gecko_Document_URI(const mozilla::dom::Document*);
+bool Gecko_Document_ChromeRulesEnabled(const mozilla::dom::Document*);
+
+const mozilla::dom::NodeInfo* Gecko_Node_NodeInfo(const nsINode*);
+const nsINode* Gecko_Node_Parent(const nsINode*);
+const nsIContent* Gecko_Node_FirstChild(const nsINode*);
+const nsIContent* Gecko_Node_NextSibling(const nsINode*);
+const nsIContent* Gecko_Node_PreviousSibling(const nsINode*);
+const mozilla::dom::Document* Gecko_Node_OwnerDoc(const nsINode*);
+uint32_t Gecko_Node_Flags(const nsINode*);
+void Gecko_Node_SetFlags(const nsINode*, uint32_t);
+void Gecko_Node_UnsetFlags(const nsINode*, uint32_t);
+uint32_t Gecko_Node_SelectorFlags(const nsINode*);
+void Gecko_Node_SetSelectorFlags(const nsINode*, uint32_t);
+bool Gecko_Node_GetBoolFlag(const nsINode*, uint32_t);
+
+const nsINode* Gecko_ShadowRoot_AsNode(const mozilla::dom::ShadowRoot*);
+const mozilla::dom::Element* Gecko_ShadowRoot_Host(
+    const mozilla::dom::ShadowRoot*);
+const mozilla::StyleAuthorStyles* Gecko_ShadowRoot_Styles(
+    const mozilla::dom::ShadowRoot*);
+const nsTArray<const mozilla::dom::Element*>* Gecko_ShadowRoot_Parts(
+    const mozilla::dom::ShadowRoot*);
+
+ServoNodeData* Gecko_Element_GetServoData(const mozilla::dom::Element*);
+void Gecko_Element_SetServoData(const mozilla::dom::Element*, ServoNodeData*);
+const AttrArray::InternalAttr* Gecko_Element_Attrs(
+    const mozilla::dom::Element*, uint32_t*);
+const mozilla::dom::FragmentOrElement::nsDOMSlots* Gecko_Element_DOMSlots(
+    const mozilla::dom::Element*);
+const mozilla::dom::FragmentOrElement::nsExtendedDOMSlots*
+Gecko_Element_ExtendedDOMSlots(const mozilla::dom::Element*);
+uint64_t Gecko_Element_State(const mozilla::dom::Element*);
+uint64_t Gecko_Element_StyleState(const mozilla::dom::Element*);
+const mozilla::dom::ShadowRoot* Gecko_Element_ShadowRoot(
+    const mozilla::dom::Element*);
+const mozilla::dom::ShadowRoot* Gecko_Element_ContainingShadow(
+    const mozilla::dom::Element*);
+const mozilla::dom::Element* Gecko_Element_AssignedSlot(
+    const mozilla::dom::Element*);
+const mozilla::StyleLockedDeclarationBlock*
+Gecko_Element_SMILOverrideDeclarationBlock(const mozilla::dom::Element*);
+
+uint32_t Gecko_AttrValue_AtomCount(const nsAttrValue*);
+nsAtom* Gecko_AttrValue_AtomAt(const nsAttrValue*, uint32_t);
+
+uintptr_t Gecko_URLExtraData_SharedCount();
+mozilla::URLExtraData* Gecko_URLExtraData_Shared(uintptr_t);
+intptr_t Gecko_URLExtraData_SharedIndex(const mozilla::URLExtraData*);
+
+bool Gecko_PresContext_IsPrintPreview(const nsPresContext*);
+nsAtom* Gecko_PresContext_Medium(const nsPresContext*);
+void Gecko_PresContext_AuViewportSize(const nsPresContext*, nscoord*,
+                                      nscoord*);
+void Gecko_PresContext_AuViewportSizeForViewportUnitResolution(
+    const nsPresContext*, uint8_t, nscoord*, nscoord*);
+int32_t Gecko_PresContext_AppUnitsPerDevPixel(const nsPresContext*);
+int32_t Gecko_PresContext_AppUnitsPerDevPixelAtUnitFullZoom(
+    const nsPresContext*);
+float Gecko_PresContext_OverrideDPPX(const nsPresContext*);
+mozilla::StyleForcedColors Gecko_PresContext_ForcedColors(const nsPresContext*);
+float Gecko_PresContext_TextZoom(const nsPresContext*);
+
 const nsINode* Gecko_GetLastChild(const nsINode*);
 const nsINode* Gecko_GetFlattenedTreeParentNode(const nsINode*);
 const mozilla::dom::Element* Gecko_GetBeforeOrAfterPseudo(

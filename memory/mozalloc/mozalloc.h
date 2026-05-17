@@ -31,8 +31,13 @@
 // need to use _impl suffixes, which is becoming cumbersome. We'll have to use
 // something like a malloc.h wrapper and allow the use of the functions without
 // a _impl suffix. In the meanwhile, this is enough to get by for C++ code.
-#  define NOTHROW_MALLOC_DECL(name, return_type, ...) \
-    MOZ_MEMORY_API return_type name##_impl(__VA_ARGS__) noexcept(true);
+#  if defined(__GLIBC__)
+#    define NOTHROW_MALLOC_DECL(name, return_type, ...) \
+      MOZ_MEMORY_API return_type name##_impl(__VA_ARGS__) noexcept(true);
+#  else
+#    define NOTHROW_MALLOC_DECL(name, return_type, ...) \
+      MOZ_MEMORY_API return_type name##_impl(__VA_ARGS__);
+#  endif
 #  define MALLOC_DECL(name, return_type, ...) \
     MOZ_MEMORY_API return_type name##_impl(__VA_ARGS__);
 #  include "malloc_decls.h"

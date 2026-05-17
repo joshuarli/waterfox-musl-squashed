@@ -25,7 +25,6 @@ use crate::gecko_bindings::bindings;
 use crate::gecko_bindings::bindings::Gecko_ElementHasAnimations;
 use crate::gecko_bindings::bindings::Gecko_ElementHasCSSAnimations;
 use crate::gecko_bindings::bindings::Gecko_ElementHasCSSTransitions;
-use crate::gecko_bindings::bindings::Gecko_ElementState;
 use crate::gecko_bindings::bindings::Gecko_GetActiveLinkAttrDeclarationBlock;
 use crate::gecko_bindings::bindings::Gecko_GetAnimationEffectCount;
 use crate::gecko_bindings::bindings::Gecko_GetAnimationRule;
@@ -40,7 +39,7 @@ use crate::gecko_bindings::bindings::Gecko_UnsetDirtyStyleAttr;
 use crate::gecko_bindings::bindings::Gecko_UpdateAnimations;
 use crate::gecko_bindings::structs;
 use crate::gecko_bindings::structs::nsChangeHint;
-use crate::gecko_bindings::structs::EffectCompositor_CascadeLevel as CascadeLevel;
+use crate::gecko_bindings::structs::EffectCompositor_CascadeLevel as GeckoCascadeLevel;
 use crate::gecko_bindings::structs::ELEMENT_HANDLED_SNAPSHOT;
 use crate::gecko_bindings::structs::ELEMENT_HAS_ANIMATION_ONLY_DIRTY_DESCENDANTS_FOR_SERVO;
 use crate::gecko_bindings::structs::ELEMENT_HAS_DIRTY_DESCENDANTS_FOR_SERVO;
@@ -80,12 +79,10 @@ use selectors::sink::Push;
 use selectors::{Element, OpaqueElement};
 use selectors::parser::PseudoElement as ParserPseudoElement;
 use servo_arc::{Arc, ArcBorrow};
-use std::cell::Cell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ptr;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 #[inline]
 fn elements_with_id<'a, 'le>(
@@ -118,17 +115,17 @@ impl<'ld> TDocument for GeckoDocument<'ld> {
 
     #[inline]
     fn as_node(&self) -> Self::ConcreteNode {
-        GeckoNode(&self.0._base)
+        unsafe { GeckoNode(&*bindings::Gecko_Document_AsNode(self.0)) }
     }
 
     #[inline]
     fn is_html_document(&self) -> bool {
-        self.0.mType == structs::Document_Type::eHTML
+        unsafe { bindings::Gecko_Document_IsHTMLDocument(self.0) }
     }
 
     #[inline]
     fn quirks_mode(&self) -> QuirksMode {
-        self.0.mCompatMode.into()
+        unsafe { bindings::Gecko_Document_CompatibilityMode(self.0).into() }
     }
 
     #[inline]
@@ -169,12 +166,12 @@ impl<'lr> TShadowRoot for GeckoShadowRoot<'lr> {
 
     #[inline]
     fn as_node(&self) -> Self::ConcreteNode {
-        GeckoNode(&self.0._base._base._base._base)
+        unsafe { GeckoNode(&*bindings::Gecko_ShadowRoot_AsNode(self.0)) }
     }
 
     #[inline]
     fn host(&self) -> GeckoElement<'lr> {
-        GeckoElement(unsafe { &*self.0._base.mHost.mRawPtr })
+        unsafe { GeckoElement(&*bindings::Gecko_ShadowRoot_Host(self.0)) }
     }
 
     #[inline]
@@ -182,7 +179,7 @@ impl<'lr> TShadowRoot for GeckoShadowRoot<'lr> {
     where
         Self: 'a,
     {
-        let author_styles = unsafe { self.0.mServoStyles.mPtr.as_ref()? };
+        let author_styles = unsafe { bindings::Gecko_ShadowRoot_Styles(self.0).as_ref()? };
         Some(&author_styles.data)
     }
 
@@ -201,7 +198,8 @@ impl<'lr> TShadowRoot for GeckoShadowRoot<'lr> {
     where
         Self: 'a,
     {
-        let slice: &[*const RawGeckoElement] = &*self.0.mParts;
+        let slice: &[*const RawGeckoElement] =
+            unsafe { &**bindings::Gecko_ShadowRoot_Parts(self.0) };
 
         #[allow(dead_code)]
         unsafe fn static_assert() {
@@ -215,7 +213,7 @@ impl<'lr> TShadowRoot for GeckoShadowRoot<'lr> {
     fn implicit_scope_for_sheet(&self, sheet_index: usize) -> Option<ImplicitScopeRoot> {
         use crate::stylesheets::StylesheetInDocument;
 
-        let author_styles = unsafe { self.0.mServoStyles.mPtr.as_ref()? };
+        let author_styles = unsafe { bindings::Gecko_ShadowRoot_Styles(self.0).as_ref()? };
         let sheet = author_styles.stylesheets.get(sheet_index)?;
         sheet.implicit_scope_root()
     }
@@ -276,73 +274,37 @@ impl<'ln> GeckoNode<'ln> {
 
     #[inline]
     fn from_content(content: &'ln nsIContent) -> Self {
-        GeckoNode(&content._base)
+        unsafe { GeckoNode(&*bindings::Gecko_Content_AsNode(content)) }
     }
 
     #[inline]
     fn set_flags(&self, flags: u32) {
-        self.flags_atomic().fetch_or(flags, Ordering::Relaxed);
-    }
-
-    fn flags_atomic_for(flags: &Cell<u32>) -> &AtomicU32 {
-        const_assert!(std::mem::size_of::<Cell<u32>>() == std::mem::size_of::<AtomicU32>());
-        const_assert!(std::mem::align_of::<Cell<u32>>() == std::mem::align_of::<AtomicU32>());
-
-        // Rust doesn't provide standalone atomic functions like GCC/clang do
-        // (via the atomic intrinsics) or via std::atomic_ref, but it guarantees
-        // that the memory representation of u32 and AtomicU32 matches:
-        // https://doc.rust-lang.org/std/sync/atomic/struct.AtomicU32.html
-        unsafe { std::mem::transmute::<&Cell<u32>, &AtomicU32>(flags) }
-    }
-
-    #[inline]
-    fn flags_atomic(&self) -> &AtomicU32 {
-        Self::flags_atomic_for(&self.0._base._base_1.mFlags)
+        unsafe { bindings::Gecko_Node_SetFlags(self.0, flags) };
     }
 
     #[inline]
     fn flags(&self) -> u32 {
-        self.flags_atomic().load(Ordering::Relaxed)
-    }
-
-    #[inline]
-    fn selector_flags_atomic(&self) -> &AtomicU32 {
-        Self::flags_atomic_for(&self.0.mSelectorFlags)
+        unsafe { bindings::Gecko_Node_Flags(self.0) }
     }
 
     #[inline]
     fn selector_flags(&self) -> u32 {
-        self.selector_flags_atomic().load(Ordering::Relaxed)
+        unsafe { bindings::Gecko_Node_SelectorFlags(self.0) }
     }
 
     #[inline]
     fn set_selector_flags(&self, flags: u32) {
-        self.selector_flags_atomic()
-            .fetch_or(flags, Ordering::Relaxed);
+        unsafe { bindings::Gecko_Node_SetSelectorFlags(self.0, flags) };
     }
 
     #[inline]
     fn node_info(&self) -> &structs::NodeInfo {
-        debug_assert!(!self.0.mNodeInfo.mRawPtr.is_null());
-        unsafe { &*self.0.mNodeInfo.mRawPtr }
-    }
-
-    // These live in different locations depending on processor architecture.
-    #[cfg(target_pointer_width = "64")]
-    #[inline]
-    fn bool_flags(&self) -> u32 {
-        (self.0)._base._base_1.mBoolFlags
-    }
-
-    #[cfg(target_pointer_width = "32")]
-    #[inline]
-    fn bool_flags(&self) -> u32 {
-        (self.0).mBoolFlags
+        unsafe { &*bindings::Gecko_Node_NodeInfo(self.0) }
     }
 
     #[inline]
     fn get_bool_flag(&self, flag: nsINode_BooleanFlag) -> bool {
-        self.bool_flags() & (1u32 << flag as u32) != 0
+        unsafe { bindings::Gecko_Node_GetBoolFlag(self.0, flag as u32) }
     }
 
     /// This logic is duplicate in Gecko's nsINode::IsInShadowTree().
@@ -472,15 +434,13 @@ impl<'ln> TNode for GeckoNode<'ln> {
 
     #[inline]
     fn parent_node(&self) -> Option<Self> {
-        unsafe { self.0.mParent.as_ref().map(GeckoNode) }
+        unsafe { bindings::Gecko_Node_Parent(self.0).as_ref().map(GeckoNode) }
     }
 
     #[inline]
     fn first_child(&self) -> Option<Self> {
         unsafe {
-            self.0
-                .mFirstChild
-                .raw()
+            bindings::Gecko_Node_FirstChild(self.0)
                 .as_ref()
                 .map(GeckoNode::from_content)
         }
@@ -494,20 +454,16 @@ impl<'ln> TNode for GeckoNode<'ln> {
     #[inline]
     fn prev_sibling(&self) -> Option<Self> {
         unsafe {
-            let prev_or_last = GeckoNode::from_content(self.0.mPreviousOrLastSibling.as_ref()?);
-            if prev_or_last.0.mNextSibling.raw().is_null() {
-                return None;
-            }
-            Some(prev_or_last)
+            bindings::Gecko_Node_PreviousSibling(self.0)
+                .as_ref()
+                .map(GeckoNode::from_content)
         }
     }
 
     #[inline]
     fn next_sibling(&self) -> Option<Self> {
         unsafe {
-            self.0
-                .mNextSibling
-                .raw()
+            bindings::Gecko_Node_NextSibling(self.0)
                 .as_ref()
                 .map(GeckoNode::from_content)
         }
@@ -515,8 +471,7 @@ impl<'ln> TNode for GeckoNode<'ln> {
 
     #[inline]
     fn owner_doc(&self) -> Self::ConcreteDocument {
-        debug_assert!(!self.node_info().mDocument.is_null());
-        GeckoDocument(unsafe { &*self.node_info().mDocument })
+        GeckoDocument(unsafe { &*bindings::Gecko_Node_OwnerDoc(self.0) })
     }
 
     #[inline]
@@ -647,7 +602,7 @@ impl<'le> GeckoElement<'le> {
     /// Gets the raw `ElementData` refcell for the element.
     #[inline(always)]
     pub fn get_data(&self) -> Option<&AtomicRefCell<ElementData>> {
-        unsafe { self.0.mServoData.get().as_ref() }
+        unsafe { bindings::Gecko_Element_GetServoData(self.0).as_ref() }
     }
 
     /// Returns whether any animation applies to this element.
@@ -659,10 +614,12 @@ impl<'le> GeckoElement<'le> {
     #[inline(always)]
     fn attrs(&self) -> &[structs::AttrArray_InternalAttr] {
         unsafe {
-            match self.0.mAttrs.mImpl.mPtr.as_ref() {
-                Some(attrs) => attrs.mBuffer.as_slice(attrs.mAttrCount as usize),
-                None => return &[],
+            let mut length = 0;
+            let attrs = bindings::Gecko_Element_Attrs(self.0, &mut length);
+            if attrs.is_null() {
+                return &[];
             }
+            std::slice::from_raw_parts(attrs, length as usize)
         }
     }
 
@@ -708,9 +665,7 @@ impl<'le> GeckoElement<'le> {
 
     #[inline]
     unsafe fn unset_flags(&self, flags: u32) {
-        self.as_node()
-            .flags_atomic()
-            .fetch_and(!flags, Ordering::Relaxed);
+        bindings::Gecko_Node_UnsetFlags(self.as_node().0, flags);
     }
 
     /// Returns true if this element has descendants for lazy frame construction.
@@ -728,19 +683,13 @@ impl<'le> GeckoElement<'le> {
     /// Returns a reference to the DOM slots for this Element, if they exist.
     #[inline]
     fn dom_slots(&self) -> Option<&structs::FragmentOrElement_nsDOMSlots> {
-        let slots = self.as_node().0.mSlots as *const structs::FragmentOrElement_nsDOMSlots;
-        unsafe { slots.as_ref() }
+        unsafe { bindings::Gecko_Element_DOMSlots(self.0).as_ref() }
     }
 
     /// Returns a reference to the extended DOM slots for this Element.
     #[inline]
     fn extended_slots(&self) -> Option<&structs::FragmentOrElement_nsExtendedDOMSlots> {
-        self.dom_slots().and_then(|s| unsafe {
-            // For the bit usage, see nsContentSlots::GetExtendedSlots.
-            let e_slots = s._base.mExtendedSlots &
-                !structs::nsIContent_nsContentSlots_sNonOwningExtendedSlotsFlag;
-            (e_slots as *const structs::FragmentOrElement_nsExtendedDOMSlots).as_ref()
-        })
+        unsafe { bindings::Gecko_Element_ExtendedDOMSlots(self.0).as_ref() }
     }
 
     #[inline]
@@ -756,18 +705,14 @@ impl<'le> GeckoElement<'le> {
 
     #[inline]
     fn state_internal(&self) -> u64 {
-        if !self
-            .as_node()
-            .get_bool_flag(nsINode_BooleanFlag::ElementHasLockedStyleStates)
-        {
-            return self.0.mState.bits;
-        }
-        unsafe { Gecko_ElementState(self.0) }
+        unsafe { bindings::Gecko_Element_StyleState(self.0) }
     }
 
     #[inline]
     fn document_state(&self) -> DocumentState {
-        DocumentState::from_bits_retain(self.as_node().owner_doc().0.mState.bits)
+        DocumentState::from_bits_retain(unsafe {
+            bindings::Gecko_Document_State(self.as_node().owner_doc().0)
+        })
     }
 
     #[inline]
@@ -991,7 +936,7 @@ fn selector_flags_to_node_flags(flags: ElementSelectorFlags) -> u32 {
 
 fn get_animation_rule(
     element: &GeckoElement,
-    cascade_level: CascadeLevel,
+    cascade_level: GeckoCascadeLevel,
 ) -> Option<Arc<Locked<PropertyDeclarationBlock>>> {
     // There's a very rough correlation between the number of effects
     // (animations) on an element and the number of properties it is likely to
@@ -1158,29 +1103,8 @@ impl<'le> TElement for GeckoElement<'le> {
             return &[];
         }
 
-        let slot: &structs::HTMLSlotElement = unsafe { mem::transmute(self.0) };
-
-        if cfg!(debug_assertions) {
-            let base: &RawGeckoElement = &slot._base._base._base;
-            assert_eq!(base as *const _, self.0 as *const _, "Bad cast");
-        }
-
-        // FIXME(emilio): Workaround a bindgen bug on Android that causes
-        // mAssignedNodes to be at the wrong offset. See bug 1466406.
-        //
-        // Bug 1466580 tracks running the Android layout tests on automation.
-        //
-        // The actual bindgen bug still needs reduction.
-        let assigned_nodes: &[structs::RefPtr<structs::nsINode>] = if !cfg!(target_os = "android") {
-            debug_assert_eq!(
-                unsafe { bindings::Gecko_GetAssignedNodes(self.0) },
-                &slot.mAssignedNodes as *const _,
-            );
-
-            &*slot.mAssignedNodes
-        } else {
-            unsafe { &**bindings::Gecko_GetAssignedNodes(self.0) }
-        };
+        let assigned_nodes: &[structs::RefPtr<structs::nsINode>] =
+            unsafe { &**bindings::Gecko_GetAssignedNodes(self.0) };
 
         debug_assert_eq!(
             mem::size_of::<structs::RefPtr<structs::nsINode>>(),
@@ -1193,18 +1117,17 @@ impl<'le> TElement for GeckoElement<'le> {
 
     #[inline]
     fn shadow_root(&self) -> Option<GeckoShadowRoot<'le>> {
-        let slots = self.extended_slots()?;
-        unsafe { slots.mShadowRoot.mRawPtr.as_ref().map(GeckoShadowRoot) }
+        unsafe {
+            bindings::Gecko_Element_ShadowRoot(self.0)
+                .as_ref()
+                .map(GeckoShadowRoot)
+        }
     }
 
     #[inline]
     fn containing_shadow(&self) -> Option<GeckoShadowRoot<'le>> {
-        let slots = self.extended_slots()?;
         unsafe {
-            slots
-                ._base
-                .mContainingShadow
-                .mRawPtr
+            bindings::Gecko_Element_ContainingShadow(self.0)
                 .as_ref()
                 .map(GeckoShadowRoot)
         }
@@ -1268,12 +1191,7 @@ impl<'le> TElement for GeckoElement<'le> {
 
     fn smil_override(&self) -> Option<ArcBorrow<Locked<PropertyDeclarationBlock>>> {
         unsafe {
-            let slots = self.extended_slots()?;
-
-            let declaration: &structs::DeclarationBlock =
-                slots.mSMILOverrideStyleDeclaration.mRawPtr.as_ref()?;
-
-            let raw: &structs::StyleLockedDeclarationBlock = declaration.mRaw.mRawPtr.as_ref()?;
+            let raw = bindings::Gecko_Element_SMILOverrideDeclarationBlock(self.0).as_ref()?;
             Some(ArcBorrow::from_ref(raw))
         }
     }
@@ -1282,14 +1200,14 @@ impl<'le> TElement for GeckoElement<'le> {
         &self,
         _: &SharedStyleContext,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>> {
-        get_animation_rule(self, CascadeLevel::Animations)
+        get_animation_rule(self, GeckoCascadeLevel::Animations)
     }
 
     fn transition_rule(
         &self,
         _: &SharedStyleContext,
     ) -> Option<Arc<Locked<PropertyDeclarationBlock>>> {
-        get_animation_rule(self, CascadeLevel::Transitions)
+        get_animation_rule(self, GeckoCascadeLevel::Transitions)
     }
 
     #[inline]
@@ -1469,13 +1387,13 @@ impl<'le> TElement for GeckoElement<'le> {
         if !self.has_data() {
             debug!("Creating ElementData for {:?}", self);
             let ptr = Box::into_raw(Box::new(AtomicRefCell::new(ElementData::default())));
-            self.0.mServoData.set(ptr);
+            bindings::Gecko_Element_SetServoData(self.0, ptr);
         }
         self.mutate_data().unwrap()
     }
 
     unsafe fn clear_data(&self) {
-        let ptr = self.0.mServoData.get();
+        let ptr = bindings::Gecko_Element_GetServoData(self.0);
         self.unset_flags(
             ELEMENT_HAS_SNAPSHOT |
                 ELEMENT_HANDLED_SNAPSHOT |
@@ -1484,8 +1402,8 @@ impl<'le> TElement for GeckoElement<'le> {
         );
         if !ptr.is_null() {
             debug!("Dropping ElementData for {:?}", self);
-            let data = Box::from_raw(self.0.mServoData.get());
-            self.0.mServoData.set(ptr::null_mut());
+            let data = Box::from_raw(ptr);
+            bindings::Gecko_Element_SetServoData(self.0, ptr::null_mut());
 
             // Perform a mutable borrow of the data in debug builds. This
             // serves as an assertion that there are no outstanding borrows
@@ -1925,9 +1843,11 @@ impl<'le> ::selectors::Element for GeckoElement<'le> {
 
     #[inline]
     fn assigned_slot(&self) -> Option<Self> {
-        let slot = self.extended_slots()?._base.mAssignedSlot.mRawPtr;
-
-        unsafe { Some(GeckoElement(&slot.as_ref()?._base._base._base)) }
+        unsafe {
+            bindings::Gecko_Element_AssignedSlot(self.0)
+                .as_ref()
+                .map(GeckoElement)
+        }
     }
 
     #[inline]

@@ -23,55 +23,23 @@ use smallvec::SmallVec;
 enum Class<'a> {
     None,
     One(*const nsAtom),
-    More(&'a [structs::RefPtr<nsAtom>]),
-}
-
-#[inline(always)]
-fn base_type(attr: &structs::nsAttrValue) -> structs::nsAttrValue_ValueBaseType {
-    (attr.mBits & structs::NS_ATTRVALUE_BASETYPE_MASK) as structs::nsAttrValue_ValueBaseType
-}
-
-#[inline(always)]
-unsafe fn ptr<T>(attr: &structs::nsAttrValue) -> *const T {
-    (attr.mBits & !structs::NS_ATTRVALUE_BASETYPE_MASK) as *const T
+    More(&'a structs::nsAttrValue),
 }
 
 #[inline(always)]
 unsafe fn get_class_or_part_from_attr(attr: &structs::nsAttrValue) -> Class {
     debug_assert!(bindings::Gecko_AssertClassAttrValueIsSane(attr));
-    let base_type = base_type(attr);
-    if base_type == structs::nsAttrValue_ValueBaseType_eAtomBase {
-        return Class::One(ptr::<nsAtom>(attr));
+    match bindings::Gecko_AttrValue_AtomCount(attr) {
+        0 => Class::None,
+        1 => Class::One(bindings::Gecko_AttrValue_AtomAt(attr, 0)),
+        _ => Class::More(attr),
     }
-    if base_type == structs::nsAttrValue_ValueBaseType_eOtherBase {
-        let container = ptr::<structs::MiscContainer>(attr);
-        debug_assert_eq!(
-            (*container).mType,
-            structs::nsAttrValue_ValueType_eAtomArray
-        );
-        // NOTE: Bindgen doesn't deal with AutoTArray, so cast it below.
-        let attr_array: *const _ = *(*container)
-            .__bindgen_anon_1
-            .mValue
-            .as_ref()
-            .__bindgen_anon_1
-            .mAtomArray
-            .as_ref();
-        let array =
-            (*attr_array).mArray.as_ptr() as *const structs::nsTArray<structs::RefPtr<nsAtom>>;
-        return Class::More(&**array);
-    }
-    debug_assert_eq!(base_type, structs::nsAttrValue_ValueBaseType_eStringBase);
-    Class::None
 }
 
 #[inline(always)]
 unsafe fn get_id_from_attr(attr: &structs::nsAttrValue) -> &WeakAtom {
-    debug_assert_eq!(
-        base_type(attr),
-        structs::nsAttrValue_ValueBaseType_eAtomBase
-    );
-    WeakAtom::new(ptr::<nsAtom>(attr))
+    debug_assert_eq!(bindings::Gecko_AttrValue_AtomCount(attr), 1);
+    WeakAtom::new(bindings::Gecko_AttrValue_AtomAt(attr, 0))
 }
 
 impl structs::nsAttrName {
@@ -170,15 +138,19 @@ pub fn has_class_or_part(
     match unsafe { get_class_or_part_from_attr(attr) } {
         Class::None => false,
         Class::One(atom) => unsafe { case_sensitivity.eq_atom(name, WeakAtom::new(atom)) },
-        Class::More(atoms) => match case_sensitivity {
+        Class::More(attr) => match case_sensitivity {
             CaseSensitivity::CaseSensitive => {
                 let name_ptr = name.as_ptr();
-                atoms.iter().any(|atom| atom.mRawPtr == name_ptr)
+                unsafe {
+                    (0..bindings::Gecko_AttrValue_AtomCount(attr))
+                        .any(|i| bindings::Gecko_AttrValue_AtomAt(attr, i) == name_ptr)
+                }
             },
             CaseSensitivity::AsciiCaseInsensitive => unsafe {
-                atoms
-                    .iter()
-                    .any(|atom| WeakAtom::new(atom.mRawPtr).eq_ignore_ascii_case(name))
+                (0..bindings::Gecko_AttrValue_AtomCount(attr)).any(|i| {
+                    WeakAtom::new(bindings::Gecko_AttrValue_AtomAt(attr, i))
+                        .eq_ignore_ascii_case(name)
+                })
             },
         },
     }
@@ -195,9 +167,9 @@ where
         match get_class_or_part_from_attr(attr) {
             Class::None => {},
             Class::One(atom) => AtomIdent::with(atom, callback),
-            Class::More(atoms) => {
-                for atom in atoms {
-                    AtomIdent::with(atom.mRawPtr, &mut callback)
+            Class::More(attr) => {
+                for i in 0..bindings::Gecko_AttrValue_AtomCount(attr) {
+                    AtomIdent::with(bindings::Gecko_AttrValue_AtomAt(attr, i), &mut callback)
                 }
             },
         }

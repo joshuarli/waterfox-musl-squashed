@@ -6439,6 +6439,9 @@ static replace_malloc_handle_t replace_malloc_handle() {
 static void replace_malloc_init_funcs(malloc_table_t*);
 
 #  ifdef MOZ_REPLACE_MALLOC_STATIC
+#    ifdef MOZ_MIMALLOC_REPLACE
+extern "C" void mimalloc_init(malloc_table_t*, ReplaceMallocBridge**);
+#    endif
 extern "C" void logalloc_init(malloc_table_t*, ReplaceMallocBridge**);
 
 extern "C" void dmd_init(malloc_table_t*, ReplaceMallocBridge**);
@@ -6474,6 +6477,11 @@ static void init() {
     replace_init(&tempTable, &gReplaceMallocBridge);
   }
 #  ifdef MOZ_REPLACE_MALLOC_STATIC
+#    ifdef MOZ_MIMALLOC_REPLACE
+  if (Equals(tempTable, gDefaultMallocTable)) {
+    mimalloc_init(&tempTable, &gReplaceMallocBridge);
+  }
+#    endif
   if (Equals(tempTable, gDefaultMallocTable)) {
     logalloc_init(&tempTable, &gReplaceMallocBridge);
   }
@@ -6623,8 +6631,13 @@ static void replace_malloc_init_funcs(malloc_table_t* table) {
     GENERIC_MALLOC_DECL2_MINGW(name, name##_impl, return_type, ##__VA_ARGS__)
 #endif
 
-#define NOTHROW_MALLOC_DECL(...) \
-  MOZ_MEMORY_API MACRO_CALL(GENERIC_MALLOC_DECL, (noexcept(true), __VA_ARGS__))
+#if defined(__GLIBC__)
+#  define NOTHROW_MALLOC_DECL(...) \
+    MOZ_MEMORY_API MACRO_CALL(GENERIC_MALLOC_DECL, (noexcept(true), __VA_ARGS__))
+#else
+#  define NOTHROW_MALLOC_DECL(...) \
+    MOZ_MEMORY_API MACRO_CALL(GENERIC_MALLOC_DECL, (, __VA_ARGS__))
+#endif
 #define MALLOC_DECL(...) \
   MOZ_MEMORY_API MACRO_CALL(GENERIC_MALLOC_DECL, (, __VA_ARGS__))
 #define MALLOC_FUNCS MALLOC_FUNCS_MALLOC

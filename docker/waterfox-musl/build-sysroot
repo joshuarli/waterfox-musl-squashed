@@ -1,0 +1,756 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=${WFX_REPO_ROOT:-/work}
+cache=${WFX_CACHE:-/cache}
+prefix=${WFX_SYSROOT:-/opt/wfx/sysroot}
+lock=${WFX_SOURCES_LOCK:-$repo_root/docker/waterfox-musl/sources.lock}
+sources=$cache/sources
+build_root=$cache/build/sysroot
+jobs=${JOBS:-$(nproc)}
+
+mkdir -p "$sources" "$build_root" "$prefix" "$prefix/.wfx-stamps"
+
+export PATH=$prefix/bin:/usr/lib/ninja-build/bin:/usr/lib/llvm22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export CC=${CC:-clang-22}
+export CXX=${CXX:-clang++-22}
+export AR=${AR:-/usr/lib/llvm22/bin/llvm-ar}
+export RANLIB=${RANLIB:-/usr/lib/llvm22/bin/llvm-ranlib}
+export NM=${NM:-/usr/lib/llvm22/bin/llvm-nm}
+export STRIP=${STRIP:-/usr/lib/llvm22/bin/llvm-strip}
+export READELF=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
+export PKG_CONFIG_LIBDIR=$prefix/lib/pkgconfig:$prefix/share/pkgconfig
+export PKG_CONFIG_PATH=
+export PKG_CONFIG_SYSROOT_DIR=
+export CPPFLAGS=${CPPFLAGS:-"-I$prefix/include"}
+export CFLAGS=${CFLAGS:-"-O2 -g0 -fPIC"}
+export CXXFLAGS=${CXXFLAGS:-"-O2 -g0 -fPIC"}
+export LDFLAGS=${LDFLAGS:-"-fuse-ld=mold -L$prefix/lib -Wl,-rpath-link,$prefix/lib -Wl,--as-needed"}
+
+require_clang() {
+  case "$($CC --version | sed -n '1p')" in
+    *"clang version 22."*) ;;
+    *) printf 'expected clang 22 CC, got: %s\n' "$($CC --version | sed -n '1p')" >&2; exit 1 ;;
+  esac
+  case "$($CXX --version | sed -n '1p')" in
+    *"clang version 22."*) ;;
+    *) printf 'expected clang 22 CXX, got: %s\n' "$($CXX --version | sed -n '1p')" >&2; exit 1 ;;
+  esac
+}
+
+source_row() {
+  awk -v package="$1" '$1 == package { print; found = 1 } END { exit found ? 0 : 1 }' "$lock"
+}
+
+source_field() {
+  local name=$1 field=$2
+  source_row "$name" | awk -v field="$field" '{ print $field }'
+}
+
+source_version() {
+  source_field "$1" 2
+}
+
+source_url() {
+  source_field "$1" 3
+}
+
+source_sha256() {
+  source_field "$1" 4
+}
+
+archive_path() {
+  local name=$1 url
+  url=$(source_url "$name")
+  printf '%s/%s\n' "$sources" "${url##*/}"
+}
+
+fetch_source() {
+  local name=$1 url sha archive
+  url=$(source_url "$name")
+  sha=$(source_sha256 "$name")
+  archive=$(archive_path "$name")
+
+  if [ ! -f "$archive" ]; then
+    curl -fL "$url" -o "$archive.tmp"
+    mv "$archive.tmp" "$archive"
+  fi
+
+  printf '%s  %s\n' "$sha" "$archive" | sha256sum -c -
+}
+
+unpack_source() {
+  local name=$1 archive top
+  archive=$(archive_path "$name")
+  top=$(tar -tf "$archive" | awk -F/ 'NF { print $1; exit }')
+  rm -rf "$build_root/$top"
+  tar -xf "$archive" -C "$build_root"
+  printf '%s/%s\n' "$build_root" "$top"
+}
+
+stamp_path() {
+  local name=$1 version
+  version=$(source_version "$name")
+  printf '%s/.wfx-stamps/%s-%s\n' "$prefix" "$name" "$version"
+}
+
+already_built() {
+  local stamp
+  stamp=$(stamp_path "$1")
+  [ "${WFX_FORCE_REBUILD:-0}" != 1 ] && [ -f "$stamp" ]
+}
+
+mark_built() {
+  local name=$1 stamp
+  stamp=$(stamp_path "$name")
+  {
+    printf 'name=%s\n' "$name"
+    printf 'version=%s\n' "$(source_version "$name")"
+    printf 'cc=%s\n' "$($CC --version | sed -n '1p')"
+    printf 'built_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  } > "$stamp"
+}
+
+run_make_install() {
+  make -j"$jobs"
+  make install
+}
+
+meson_build_install() {
+  local dir=$1 build=$2
+  shift 2
+  local sysroot_ld_path="$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+  meson setup "$dir/$build" "$dir" \
+    --prefix="$prefix" \
+    --libdir=lib \
+    --buildtype=debugoptimized \
+    --wrap-mode=nodownload \
+    "$@"
+  LD_LIBRARY_PATH="$sysroot_ld_path" meson compile -C "$dir/$build" -j "$jobs"
+  LD_LIBRARY_PATH="$sysroot_ld_path" meson install --no-rebuild -C "$dir/$build"
+}
+
+clean_sysroot() {
+  rm -rf \
+    "$prefix/share/doc" \
+    "$prefix/share/info" \
+    "$prefix/share/locale" \
+    "$prefix/share/man"
+  rm -f \
+    "$prefix/bin/xmlwf" \
+    "$prefix/bin/pcre2grep" \
+    "$prefix/bin/pcre2test"
+  find "$prefix/lib" \( -type f -o -type l \) -name '*.la' -delete 2>/dev/null || true
+  find "$prefix/lib" \( -type f -o -type l \) -name '*.a' ! -name 'libmimalloc*.a' -delete 2>/dev/null || true
+}
+
+build_zlib() {
+  local dir
+  already_built zlib && return 0
+  fetch_source zlib
+  dir=$(unpack_source zlib)
+  cd "$dir"
+  CHOST=aarch64-unknown-linux-musl ./configure \
+    --prefix="$prefix" \
+    --libdir="$prefix/lib"
+  run_make_install
+  mark_built zlib
+}
+
+build_expat() {
+  local dir
+  already_built expat && return 0
+  fetch_source expat
+  dir=$(unpack_source expat)
+  cd "$dir"
+  ./configure \
+    --prefix="$prefix" \
+    --libdir="$prefix/lib" \
+    --disable-static \
+    --enable-shared \
+    --without-xmlwf \
+    --without-examples \
+    --without-tests \
+    --without-docbook
+  run_make_install
+  mark_built expat
+}
+
+build_libffi() {
+  local dir
+  already_built libffi && return 0
+  fetch_source libffi
+  dir=$(unpack_source libffi)
+  cd "$dir"
+  ./configure \
+    --prefix="$prefix" \
+    --libdir="$prefix/lib" \
+    --disable-static \
+    --enable-shared \
+    --disable-multi-os-directory \
+    --disable-docs
+  run_make_install
+  mark_built libffi
+}
+
+build_mimalloc() {
+  local dir
+  already_built mimalloc && return 0
+  fetch_source mimalloc
+  dir=$(unpack_source mimalloc)
+  cmake \
+    -S "$dir" \
+    -B "$dir/build-wfx" \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_C_COMPILER="$CC" \
+    -DCMAKE_CXX_COMPILER="$CXX" \
+    -DCMAKE_AR="$AR" \
+    -DCMAKE_RANLIB="$RANLIB" \
+    -DCMAKE_SKIP_INSTALL_RPATH=ON \
+    -DMI_BUILD_SHARED=OFF \
+    -DMI_BUILD_STATIC=ON \
+    -DMI_BUILD_OBJECT=OFF \
+    -DMI_BUILD_TESTS=OFF \
+    -DMI_INSTALL_TOPLEVEL=ON \
+    -DMI_OVERRIDE=OFF \
+    -DMI_SECURE=OFF \
+    -DMI_SECURE_FULL=OFF \
+    -DMI_DEBUG=OFF \
+    -DMI_GUARDED=OFF \
+    -DMI_PADDING=OFF \
+    -DMI_NO_PADDING=ON \
+    -DMI_LIBC_MUSL=ON
+  cmake --build "$dir/build-wfx" --parallel "$jobs"
+  cmake --install "$dir/build-wfx"
+  mark_built mimalloc
+}
+
+build_pcre2() {
+  local dir
+  already_built pcre2 && return 0
+  fetch_source pcre2
+  dir=$(unpack_source pcre2)
+  cd "$dir"
+  ./configure \
+    --prefix="$prefix" \
+    --libdir="$prefix/lib" \
+    --disable-static \
+    --enable-shared \
+    --enable-pcre2-8 \
+    --disable-pcre2-16 \
+    --disable-pcre2-32 \
+    --disable-jit \
+    --disable-pcre2grep-libz \
+    --disable-pcre2grep-libbz2 \
+    --disable-pcre2test-libreadline
+  run_make_install
+  mark_built pcre2
+}
+
+build_libpng() {
+  local dir
+  already_built libpng && return 0
+  fetch_source libpng
+  dir=$(unpack_source libpng)
+  cd "$dir"
+  ./configure \
+    --prefix="$prefix" \
+    --libdir="$prefix/lib" \
+    --disable-static \
+    --enable-shared \
+    --disable-tests \
+    --disable-tools
+  run_make_install
+  mark_built libpng
+}
+
+build_libjpeg_turbo() {
+  local dir
+  already_built libjpeg-turbo && return 0
+  fetch_source libjpeg-turbo
+  dir=$(unpack_source libjpeg-turbo)
+  cmake \
+    -S "$dir" \
+    -B "$dir/build-wfx" \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_INSTALL_PREFIX="$prefix" \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DCMAKE_C_COMPILER="$CC" \
+    -DCMAKE_CXX_COMPILER="$CXX" \
+    -DCMAKE_AR="$AR" \
+    -DCMAKE_RANLIB="$RANLIB" \
+    -DCMAKE_SKIP_INSTALL_RPATH=ON \
+    -DENABLE_SHARED=ON \
+    -DENABLE_STATIC=OFF \
+    -DWITH_JPEG8=ON \
+    -DWITH_TURBOJPEG=OFF \
+    -DWITH_TOOLS=OFF \
+    -DWITH_TESTS=OFF \
+    -DWITH_JAVA=OFF
+  cmake --build "$dir/build-wfx" --parallel "$jobs"
+  cmake --install "$dir/build-wfx"
+  mark_built libjpeg-turbo
+}
+
+build_freetype() {
+  local dir
+  already_built freetype && return 0
+  fetch_source freetype
+  dir=$(unpack_source freetype)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dbrotli=disabled \
+    -Dbzip2=disabled \
+    -Dharfbuzz=disabled \
+    -Dmmap=enabled \
+    -Dpng=enabled \
+    -Dzlib=system \
+    -Dtests=disabled
+  mark_built freetype
+}
+
+build_fontconfig() {
+  local dir
+  already_built fontconfig && return 0
+  fetch_source fontconfig
+  dir=$(unpack_source fontconfig)
+  cd "$dir"
+  ./configure \
+    --prefix="$prefix" \
+    --libdir="$prefix/lib" \
+    --sysconfdir="$prefix/etc" \
+    --localstatedir="$prefix/var" \
+    --disable-static \
+    --enable-shared \
+    --disable-docs \
+    --disable-docbook \
+    --disable-nls \
+    --disable-cache-build \
+    --disable-iconv
+  run_make_install
+  mark_built fontconfig
+}
+
+build_fribidi() {
+  local dir
+  already_built fribidi && return 0
+  fetch_source fribidi
+  dir=$(unpack_source fribidi)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Ddocs=false \
+    -Dbin=false \
+    -Dtests=false
+  mark_built fribidi
+}
+
+build_glib() {
+  local dir
+  already_built glib && return 0
+  fetch_source glib
+  dir=$(unpack_source glib)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dman-pages=disabled \
+    -Dselinux=disabled \
+    -Dlibmount=disabled \
+    -Dsysprof=disabled \
+    -Ddocumentation=false \
+    -Dtests=false \
+    -Dinstalled_tests=false \
+    -Dnls=disabled \
+    -Dglib_debug=disabled \
+    -Dlibelf=disabled \
+    -Dintrospection=disabled
+  mark_built glib
+}
+
+build_harfbuzz() {
+  local dir
+  already_built harfbuzz && return 0
+  fetch_source harfbuzz
+  dir=$(unpack_source harfbuzz)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dglib=enabled \
+    -Dgobject=enabled \
+    -Dcairo=disabled \
+    -Dchafa=disabled \
+    -Dpng=disabled \
+    -Dzlib=enabled \
+    -Dicu=disabled \
+    -Dgraphite2=disabled \
+    -Dfreetype=enabled \
+    -Dfontations=disabled \
+    -Dtests=disabled \
+    -Dintrospection=disabled \
+    -Ddocs=disabled \
+    -Dutilities=disabled \
+    -Dbenchmark=disabled
+  mark_built harfbuzz
+}
+
+build_pixman() {
+  local dir
+  already_built pixman && return 0
+  fetch_source pixman
+  dir=$(unpack_source pixman)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dlibpng=enabled \
+    -Dgtk=disabled \
+    -Dtests=disabled \
+    -Ddemos=disabled \
+    -Dopenmp=disabled
+  mark_built pixman
+}
+
+build_cairo() {
+  local dir
+  already_built cairo && return 0
+  fetch_source cairo
+  dir=$(unpack_source cairo)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dfontconfig=enabled \
+    -Dfreetype=enabled \
+    -Dpng=enabled \
+    -Dquartz=disabled \
+    -Dtee=disabled \
+    -Dxcb=disabled \
+    -Dxlib=disabled \
+    -Dxlib-xcb=disabled \
+    -Dzlib=enabled \
+    -Dtests=disabled \
+    -Dlzo=disabled \
+    -Dglib=enabled \
+    -Dspectre=disabled \
+    -Dsymbol-lookup=disabled \
+    -Dgtk_doc=false
+  mark_built cairo
+}
+
+build_pango() {
+  local dir
+  already_built pango && return 0
+  fetch_source pango
+  dir=$(unpack_source pango)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Ddocumentation=false \
+    -Dman-pages=false \
+    -Dintrospection=disabled \
+    -Dbuild-testsuite=false \
+    -Dbuild-examples=false \
+    -Dfontconfig=enabled \
+    -Dsysprof=disabled \
+    -Dlibthai=disabled \
+    -Dcairo=enabled \
+    -Dxft=disabled \
+    -Dfreetype=enabled
+  mark_built pango
+}
+
+build_wayland() {
+  local dir
+  already_built wayland && return 0
+  fetch_source wayland
+  dir=$(unpack_source wayland)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Ddocumentation=false \
+    -Ddtd_validation=false \
+    -Dtests=false \
+    -Dlibraries=true \
+    -Dscanner=true
+  mark_built wayland
+}
+
+build_wayland_protocols() {
+  local dir
+  already_built wayland-protocols && return 0
+  fetch_source wayland-protocols
+  dir=$(unpack_source wayland-protocols)
+  meson_build_install "$dir" build-wfx \
+    -Dtests=false
+  mark_built wayland-protocols
+}
+
+build_xkeyboard_config() {
+  local dir
+  already_built xkeyboard-config && return 0
+  fetch_source xkeyboard-config
+  dir=$(unpack_source xkeyboard-config)
+  meson_build_install "$dir" build-wfx \
+    -Dnls=false \
+    -Dcompat-rules=true \
+    -Dxorg-rules-symlinks=false \
+    -Dnon-latin-layouts-list=false
+  mark_built xkeyboard-config
+}
+
+build_libxkbcommon() {
+  local dir
+  already_built libxkbcommon && return 0
+  fetch_source libxkbcommon
+  dir=$(unpack_source libxkbcommon)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Denable-tools=false \
+    -Denable-x11=false \
+    -Denable-wayland=false \
+    -Denable-xkbregistry=false \
+    -Denable-docs=false \
+    -Denable-bash-completion=false
+  mark_built libxkbcommon
+}
+
+build_gdk_pixbuf() {
+  local dir
+  already_built gdk-pixbuf && return 0
+  fetch_source gdk-pixbuf
+  dir=$(unpack_source gdk-pixbuf)
+  perl -0pi -e "s/\nsubdir\('po'\)\n/\n/" "$dir/meson.build"
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dpng=enabled \
+    -Djpeg=enabled \
+    -Dtiff=disabled \
+    -Dgif=disabled \
+    -Dglycin=disabled \
+    -Dothers=disabled \
+    -Dbuiltin_loaders=png,jpeg \
+    -Dintrospection=disabled \
+    -Ddocumentation=false \
+    -Dgtk_doc=false \
+    -Dman=false \
+    -Dtests=false \
+    -Dinstalled_tests=false \
+    -Dthumbnailer=disabled \
+    -Dgio_sniffing=false
+  mark_built gdk-pixbuf
+}
+
+build_khronos_headers() {
+  already_built eglplatform-h && already_built khrplatform-h && return 0
+  fetch_source eglplatform-h
+  fetch_source khrplatform-h
+  install -Dm644 "$(archive_path eglplatform-h)" "$prefix/include/EGL/eglplatform.h"
+  install -Dm644 "$(archive_path khrplatform-h)" "$prefix/include/KHR/khrplatform.h"
+  mark_built eglplatform-h
+  mark_built khrplatform-h
+}
+
+build_libepoxy() {
+  local dir
+  already_built libepoxy && return 0
+  fetch_source libepoxy
+  dir=$(unpack_source libepoxy)
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Ddocs=false \
+    -Degl=yes \
+    -Dglx=no \
+    -Dx11=false \
+    -Dtests=false
+  mark_built libepoxy
+}
+
+build_at_spi2_core() {
+  local dir
+  already_built at-spi2-core && return 0
+  fetch_source at-spi2-core
+  dir=$(unpack_source at-spi2-core)
+  perl -0pi -e "s/libxml_dep = dependency\\('libxml-2.0', version: libxml_req_version\\)/if get_option('atk_only')\\n  libxml_dep = []\\nelse\\n  libxml_dep = dependency('libxml-2.0', version: libxml_req_version)\\nendif/" "$dir/meson.build"
+  perl -0pi -e "s/\nif xgettext\\.found\\(\\)\n  subdir\\('po'\\)\nendif\n/\n/" "$dir/meson.build"
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Datk_only=true \
+    -Dx11=disabled \
+    -Dintrospection=disabled \
+    -Ddocs=false \
+    -Dgtk2_atk_adaptor=false \
+    -Duse_systemd=false \
+    -Ddbus_glib=disabled
+  mark_built at-spi2-core
+}
+
+build_gtk() {
+  local dir
+  already_built gtk && return 0
+  fetch_source gtk
+  dir=$(unpack_source gtk)
+  perl -0pi -e "s/\nsubdir\('po'\)\nsubdir\('po-properties'\)\n/\n/" "$dir/meson.build"
+  meson_build_install "$dir" build-wfx \
+    -Ddefault_library=shared \
+    -Dx11_backend=false \
+    -Dwayland_backend=true \
+    -Dbroadway_backend=false \
+    -Dwin32_backend=false \
+    -Dquartz_backend=false \
+    -Dxinerama=no \
+    -Dprint_backends=file \
+    -Dcolord=no \
+    -Dgtk_doc=false \
+    -Dman=false \
+    -Dintrospection=false \
+    -Ddemos=false \
+    -Dexamples=false \
+    -Dtests=false \
+    -Dinstalled_tests=false \
+    -Dcloudproviders=false \
+    -Dprofiler=false \
+    -Dtracker3=false \
+    -Dbuiltin_immodules=wayland
+  mark_built gtk
+}
+
+scan_sysroot() {
+  local reject_regex file failed count
+  reject_regex='libX11|libX11-xcb|libxcb|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+  failed=0
+  count=0
+
+  while IFS= read -r file; do
+    count=$((count + 1))
+    if "$READELF" -d "$file" 2>/dev/null | grep -E "$reject_regex"; then
+      printf 'rejected dependency in %s\n' "$file" >&2
+      failed=1
+    fi
+  done < <(find "$prefix" -type f \( -name '*.so' -o -name '*.so.*' \) | sort)
+
+  if [ "$count" -eq 0 ]; then
+    printf 'no shared libraries found in %s\n' "$prefix" >&2
+    exit 1
+  fi
+
+  if [ "$failed" -ne 0 ]; then
+    exit 1
+  fi
+}
+
+smoke_compile() {
+  local smoke_dir
+  smoke_dir=$cache/build/smoke
+  mkdir -p "$smoke_dir"
+
+  cat > "$smoke_dir/sysroot-smoke.c" <<'EOF'
+#include <stdio.h>
+#include <zlib.h>
+#include <expat.h>
+#include <png.h>
+#include <jpeglib.h>
+#include <ffi.h>
+#include <mimalloc.h>
+#define PCRE2_CODE_UNIT_WIDTH 8
+#include <pcre2.h>
+#include <glib.h>
+#include <gtk/gtk.h>
+#include <pango/pangocairo.h>
+#include <wayland-version.h>
+#include <xkbcommon/xkbcommon.h>
+
+int main(void) {
+  ffi_cif cif;
+  ffi_status status = ffi_prep_cif(&cif, FFI_DEFAULT_ABI, 0, &ffi_type_void, NULL);
+  struct jpeg_error_mgr jerr;
+  PCRE2_UCHAR version[64];
+  PangoFontMap *font_map;
+  struct xkb_context *xkb_context;
+  struct xkb_keymap *xkb_keymap;
+  struct xkb_rule_names names = { "evdev", "pc105", "us", NULL, NULL };
+  jpeg_std_error(&jerr);
+  pcre2_config(PCRE2_CONFIG_VERSION, version);
+  font_map = pango_cairo_font_map_get_default();
+  xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+  if (xkb_context == NULL) {
+    return 2;
+  }
+  xkb_keymap = xkb_keymap_new_from_names(xkb_context, &names, XKB_KEYMAP_COMPILE_NO_FLAGS);
+  if (xkb_keymap == NULL) {
+    xkb_context_unref(xkb_context);
+    return 3;
+  }
+  printf("zlib=%s\n", zlibVersion());
+  printf("expat=%s\n", XML_ExpatVersion());
+  printf("libpng=%u\n", png_access_version_number());
+  printf("libjpeg=%d\n", JPEG_LIB_VERSION);
+  printf("libffi_status=%d\n", status);
+  printf("mimalloc_good_size=%zu\n", mi_good_size(4097));
+  printf("pcre2=%s\n", (char *)version);
+  printf("glib=%u.%u.%u\n", glib_major_version, glib_minor_version, glib_micro_version);
+  printf("gtk=%u.%u.%u\n", gtk_get_major_version(), gtk_get_minor_version(), gtk_get_micro_version());
+  printf("pango=%s\n", pango_version_string());
+  printf("pangocairo_fontmap=%p\n", (void *)font_map);
+  printf("wayland=%s\n", WAYLAND_VERSION);
+  printf("xkb_min_keycode=%u\n", xkb_keymap_min_keycode(xkb_keymap));
+  xkb_keymap_unref(xkb_keymap);
+  xkb_context_unref(xkb_context);
+  return status == FFI_OK ? 0 : 1;
+}
+EOF
+
+  "$CC" \
+    -O2 \
+    -g0 \
+    -fPIC \
+    -o "$smoke_dir/sysroot-smoke" \
+    "$smoke_dir/sysroot-smoke.c" \
+    $(pkgconf --cflags --libs zlib expat libpng libjpeg libffi mimalloc libpcre2-8 glib-2.0 gtk+-3.0 pangocairo wayland-client xkbcommon) \
+    -Wl,-rpath,"$prefix/lib"
+
+  LD_LIBRARY_PATH="$prefix/lib" "$smoke_dir/sysroot-smoke"
+  "$READELF" -d "$smoke_dir/sysroot-smoke" | grep NEEDED
+}
+
+build_initial() {
+  require_clang
+  build_zlib
+  build_expat
+  build_libffi
+  build_mimalloc
+  build_pcre2
+  build_libpng
+  build_libjpeg_turbo
+  build_freetype
+  build_fontconfig
+  build_fribidi
+  build_glib
+  build_harfbuzz
+  build_pixman
+  build_cairo
+  build_pango
+  build_wayland
+  build_wayland_protocols
+  build_xkeyboard_config
+  build_libxkbcommon
+  build_gdk_pixbuf
+  build_khronos_headers
+  build_libepoxy
+  build_at_spi2_core
+  build_gtk
+  clean_sysroot
+  scan_sysroot
+}
+
+case "${1:-build-initial}" in
+  build-initial)
+    build_initial
+    ;;
+  scan)
+    clean_sysroot
+    scan_sysroot
+    ;;
+  smoke)
+    require_clang
+    smoke_compile
+    ;;
+  *)
+    printf 'usage: build-sysroot [build-initial|scan|smoke]\n' >&2
+    exit 2
+    ;;
+esac

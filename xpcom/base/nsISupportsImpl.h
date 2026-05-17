@@ -29,11 +29,15 @@
 #include "mozilla/MacroArgs.h"
 #include "mozilla/MacroForEach.h"
 
-#define MOZ_ASSERT_TYPE_OK_FOR_REFCOUNTING(X)            \
-  static_assert(!std::is_destructible_v<X>,              \
-                "Reference-counted class " #X            \
-                " should not have a public destructor. " \
-                "Make this class's destructor non-public");
+#ifdef RUST_BINDGEN
+#  define MOZ_ASSERT_TYPE_OK_FOR_REFCOUNTING(X)
+#else
+#  define MOZ_ASSERT_TYPE_OK_FOR_REFCOUNTING(X)            \
+    static_assert(!std::is_destructible_v<X>,              \
+                  "Reference-counted class " #X            \
+                  " should not have a public destructor. " \
+                  "Make this class's destructor non-public");
+#endif
 
 inline nsISupports* ToSupports(decltype(nullptr)) { return nullptr; }
 

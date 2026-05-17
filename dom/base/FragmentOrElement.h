@@ -377,6 +377,16 @@ class FragmentOrElement : public nsIContent {
     return static_cast<nsExtendedDOMSlots*>(GetExistingExtendedContentSlots());
   }
 
+ public:
+  const nsDOMSlots* ServoGetExistingDOMSlots() const {
+    return GetExistingDOMSlots();
+  }
+
+  const nsExtendedDOMSlots* ServoGetExistingExtendedDOMSlots() const {
+    return GetExistingExtendedDOMSlots();
+  }
+
+ protected:
   friend class ::ContentUnbinder;
 };
 

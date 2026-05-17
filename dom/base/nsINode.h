@@ -2550,6 +2550,15 @@ class nsINode : public mozilla::dom::EventTarget {
     return static_cast<NodeSelectorFlags>(mSelectorFlags.Get());
   }
 
+  bool ServoGetBoolFlag(uint32_t aFlag) const {
+    MOZ_ASSERT(aFlag < BooleanFlagCount);
+    return mBoolFlags & (1U << aFlag);
+  }
+
+  void ServoAddSelectorFlags(uint32_t aFlags) {
+    mSelectorFlags.Set(mSelectorFlags.Get() | aFlags);
+  }
+
  protected:
   static bool Traverse(nsINode* tmp, nsCycleCollectionTraversalCallback& cb);
   static void Unlink(nsINode* tmp);
