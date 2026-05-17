@@ -175,7 +175,7 @@ WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl qemu-image
 Run visible QEMU proof:
 
 ```sh
-WFX_QEMU_DISPLAY=cocoa WFX_QEMU_ACCEL=hvf docker/waterfox-musl/wfx-musl qemu-run
+WFX_QEMU_ACCEL=hvf docker/waterfox-musl/wfx-musl qemu-run
 ```
 
 Bounded run for automated/local sanity checks:
@@ -280,13 +280,28 @@ Current QEMU functional followup:
   both event devices and adds the QEMU Virtio Keyboard and QEMU Virtio Tablet.
 - Mouse input works in the Cocoa window.
 - Keyboard input works in the Cocoa window. The later issue was that typed URL
-  bar text did not render back even though Enter submitted the URL; after that,
-  the compositor moved from pixman-only to GLES2/GBM, so manually recheck URL
-  bar repaint and popup/context menus in Cocoa.
+  bar text did not render back even though Enter submitted the URL. Hamburger
+  and context menus also appear as narrow blank or garbled surfaces. The
+  compositor moved from pixman-only to GLES2/GBM, but the issue still
+  reproduces on `hvf + virtio`; the QEMU image now disables EGL
+  buffer-age/partial-update exposure, disables WebRender partial present, and
+  pins Mesa to `kms_swrast` plus Gallium to llvmpipe. It now defaults wlroots
+  to the pixman renderer to test stale-damage, compositor GLES2, and virtio
+  GL-driver paths. Use `WFX_QEMU_GUEST_WLR_RENDERER=gles2` to restore the GLES2
+  compositor path without editing the image.
 
-If the Cocoa window is blank, investigate the wlroots GLES2/GBM software-EGL
-path first. The serial log can still show successful surface creation even if
-host-visible scan-out is wrong.
+If the Cocoa window is blank, check the launch line first. `hvf` should use
+`gpu=virtio`; `tcg` should use `gpu=bochs`. `WFX_QEMU_ACCEL=tcg
+WFX_QEMU_GPU=bochs` visibly renders the browser UI, while `hvf + bochs +
+Cocoa` can leave the host window black even though QEMU `screendump` captures a
+valid Waterfox framebuffer. Treat `hvf + bochs` as a diagnostic-only path and
+set `WFX_QEMU_ALLOW_HVF_BOCHS=1` only when intentionally reproducing it.
+
+On `hvf + virtio`, keep `virtio_gpu: driver missing` and
+`webrender::device::gl` texture-crop warnings in the suspect set while menus or
+small text updates fail to repaint. The DRI driver symlinks exist in the image,
+so that log is more likely Mesa probing or rejecting a path than a simple
+missing-file error.
 
 ## Dependency And Rejection Rules
 
@@ -332,6 +347,8 @@ For QEMU command debugging, environment knobs are:
 
 - `WFX_QEMU_DISPLAY`, default `cocoa`
 - `WFX_QEMU_ACCEL`, default `hvf`
+- `WFX_QEMU_GPU`, default `virtio` with `hvf` and `bochs` with `tcg`; accepted
+  values are `virtio` and `bochs`
 - `WFX_QEMU_MEMORY`, default `4096`
 - `WFX_QEMU_SMP`, default `4`
 - `WFX_QEMU_INPUT`, default `virtio`; accepted values are `virtio`, `usb`,
@@ -341,6 +358,10 @@ For QEMU command debugging, environment knobs are:
 - `WFX_QEMU_SERIAL`, default `stdio`
 - `WFX_QEMU_MONITOR`, default `none`
 - `WFX_QEMU_IMAGE`, `WFX_QEMU_KERNEL`, `WFX_QEMU_INITRAMFS`
+- `WFX_QEMU_GUEST_WLR_RENDERER`, optional guest override for `WLR_RENDERER`
+- `WFX_QEMU_GUEST_GALLIUM_DRIVER`, optional guest override for `GALLIUM_DRIVER`
+- `WFX_QEMU_GUEST_MESA_LOADER`, optional guest override for
+  `MESA_LOADER_DRIVER_OVERRIDE`
 
 ## When Updating The Plan
 

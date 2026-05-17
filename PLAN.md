@@ -273,6 +273,22 @@ Tranche 6 status:
 - `qemu-run` defaults the virtio GPU mode to 1600x1000. Override with
   `WFX_QEMU_WIDTH` and `WFX_QEMU_HEIGHT`; serial boot verifies 1600x1000 is the
   preferred mode.
+- `qemu-run` now selects GPU defaults by accelerator: `virtio` for HVF and
+  `bochs` for TCG. Manual testing showed `WFX_QEMU_ACCEL=tcg
+  WFX_QEMU_GPU=bochs` visibly renders the browser UI, while `hvf + bochs +
+  Cocoa` can leave the host window black even though QEMU `screendump` captures
+  a valid Waterfox framebuffer. The launcher fails fast for `hvf + bochs +
+  Cocoa` unless `WFX_QEMU_ALLOW_HVF_BOCHS=1` is set.
+- The current fast `hvf + virtio` path still accepts keyboard and mouse input
+  but can fail to repaint small UI regions: URL bar typed text, hamburger
+  menus, and context menus. Treat `virtio_gpu: driver missing` and
+  `webrender::device::gl` crop warnings as part of that rendering bug until
+  disproven. The kiosk profile now disables EGL buffer-age/partial-update
+  exposure and WebRender partial present, pins Mesa to `kms_swrast` plus
+  Gallium to llvmpipe, and now defaults wlroots to the pixman renderer to test
+  whether the failure is stale partial damage, compositor GLES2, or virtio GL
+  driver selection rather than Waterfox UI logic. `qemu-run` can override the
+  guest renderer through `WFX_QEMU_GUEST_WLR_RENDERER`.
 - The Cage patch keeps debugoptimized binaries but no longer lets `DEBUG` force
   wlroots debug logging at runtime. The repeated `Direct scan-out disabled by
   software cursor` serial spam is gone; `-D` remains the explicit Cage debug
@@ -310,9 +326,9 @@ Tranche 6 status:
 
 Next resume actions:
 
-1. Manually verify whether URL bar typed text, hamburger popup menus, and
-   right-click context menus now repaint correctly in the Cocoa QEMU window
-   after switching the compositor to wlroots GLES2/GBM.
+1. Rebuild the QEMU image, then manually verify whether URL bar typed text,
+   hamburger popup menus, and right-click context menus repaint correctly in
+   the Cocoa QEMU window with the pixman compositor renderer.
 2. Decide whether to filter or fix remaining Gecko debug-build warning spam
    (`PuppetWidget without Tab`, bundled sidebar extension errors) or leave it
    as useful debug output.
@@ -944,7 +960,7 @@ QEMU target:
 - `qemu-system-aarch64`
 - HVF acceleration on macOS when available
 - virtio block device
-- virtio GPU
+- virtio GPU for HVF; Bochs display is kept as the TCG/debug fallback
 - virtio keyboard/tablet by default, with USB HID input available through
   `WFX_QEMU_INPUT=usb`
 - default 1600x1000 virtio GPU mode, adjustable with `WFX_QEMU_WIDTH` and

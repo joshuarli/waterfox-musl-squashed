@@ -130,9 +130,13 @@ export HOME=/run/wfx-home
 export XDG_CACHE_HOME=/run/wfx-cache
 export WAYLAND_DISPLAY=wayland-0
 export MOZ_ENABLE_WAYLAND=1
+export MOZ_WEBRENDER_SOFTWARE=1
 export GDK_BACKEND=wayland
 export NO_AT_BRIDGE=1
 export LIBGL_ALWAYS_SOFTWARE=1
+export GALLIUM_DRIVER=llvmpipe
+export MESA_LOADER_DRIVER_OVERRIDE=kms_swrast
+export MESA_EXTENSION_OVERRIDE="-EGL_EXT_buffer_age -EGL_KHR_partial_update"
 export MOZ_DISABLE_AUTO_SAFE_MODE=1
 export MOZ_CRASHREPORTER_DISABLE=1
 export MOZ_DISABLE_CONTENT_SANDBOX=1
@@ -142,12 +146,26 @@ export MOZ_DISABLE_RDD_SANDBOX=1
 export MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1
 export MALLOC_OPTIONS=R
 export WLR_BACKENDS=drm,libinput
-export WLR_RENDERER=gles2
+export WLR_RENDERER=pixman
 export WLR_RENDERER_ALLOW_SOFTWARE=1
 export SEATD_SOCK=/run/seatd.sock
+for arg in $(cat /proc/cmdline); do
+  case "$arg" in
+    wfx.wlr_renderer=*)
+      export WLR_RENDERER=${arg#*=}
+      ;;
+    wfx.gallium_driver=*)
+      export GALLIUM_DRIVER=${arg#*=}
+      ;;
+    wfx.mesa_loader=*)
+      export MESA_LOADER_DRIVER_OVERRIDE=${arg#*=}
+      ;;
+  esac
+done
 profile=/run/wfx-profile
 
 echo "wfx-kiosk-init: profile=$profile" >/dev/console
+echo "wfx-kiosk-init: renderer=$WLR_RENDERER" >/dev/console
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME" "$XDG_CACHE_HOME"
 chmod 0700 "$XDG_RUNTIME_DIR"
 rm -rf "$profile"
@@ -164,7 +182,12 @@ user_pref("browser.urlbar.speculativeConnect.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
 user_pref("devtools.console.stdout.chrome", false);
 user_pref("devtools.console.stdout.content", false);
+user_pref("gfx.webrender.enable-gpu-markers", false);
+user_pref("gfx.webrender.allow-partial-present-buffer-age", false);
+user_pref("gfx.webrender.force-partial-present", false);
+user_pref("gfx.webrender.max-partial-present-rects", 0);
 user_pref("gfx.webrender.reject-software-driver", false);
+user_pref("gfx.webrender.software", true);
 user_pref("widget.dmabuf.enabled", false);
 user_pref("network.captive-portal-service.enabled", false);
 user_pref("network.connectivity-service.enabled", false);

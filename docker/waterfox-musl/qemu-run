@@ -21,8 +21,12 @@ input=${WFX_QEMU_INPUT:-virtio}
 width=${WFX_QEMU_WIDTH:-1600}
 height=${WFX_QEMU_HEIGHT:-1000}
 network=${WFX_QEMU_NETWORK:-user}
-gpu=${WFX_QEMU_GPU:-virtio}
+gpu=${WFX_QEMU_GPU:-}
 snapshot=${WFX_QEMU_SNAPSHOT:-on}
+allow_hvf_bochs=${WFX_QEMU_ALLOW_HVF_BOCHS:-0}
+guest_wlr_renderer=${WFX_QEMU_GUEST_WLR_RENDERER:-}
+guest_gallium_driver=${WFX_QEMU_GUEST_GALLIUM_DRIVER:-}
+guest_mesa_loader=${WFX_QEMU_GUEST_MESA_LOADER:-}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
@@ -76,6 +80,17 @@ if [ "$display" = cocoa ]; then
   display=cocoa,zoom-to-fit=on,show-cursor=on
 fi
 
+if [ -z "$gpu" ]; then
+  case "$accel" in
+    tcg)
+      gpu=bochs
+      ;;
+    *)
+      gpu=virtio
+      ;;
+  esac
+fi
+
 gcd() {
   local a=$1 b=$2 t
   while [ "$b" -ne 0 ]; do
@@ -87,6 +102,9 @@ gcd() {
 }
 
 if [ "$gpu" = bochs ] && [ "$accel" = hvf ]; then
+  if [ "$allow_hvf_bochs" != 1 ] && [ "$display" != none ]; then
+    fail "WFX_QEMU_GPU=bochs with WFX_QEMU_ACCEL=hvf can leave Cocoa black; use WFX_QEMU_GPU=virtio or set WFX_QEMU_ACCEL=tcg"
+  fi
   page_size=$(getconf PAGESIZE 2>/dev/null || printf '4096')
   framebuffer_stride=$((width * 4))
   if [ $(((framebuffer_stride * height) % page_size)) -ne 0 ]; then
@@ -106,7 +124,7 @@ args=(
   -m "$memory"
   -smp "$smp"
   -kernel "$kernel"
-  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}"
   -drive "file=$image,if=virtio,format=raw,snapshot=$snapshot"
   -serial "$serial"
   -monitor "$monitor"
