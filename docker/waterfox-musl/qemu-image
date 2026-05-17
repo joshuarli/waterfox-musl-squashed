@@ -44,7 +44,9 @@ install_rootfs_packages() {
       libevdev \
       libgcc \
       libinput \
+      libintl \
       libseat \
+      libstdc++ \
       libxkbcommon \
       linux-firmware-none \
       linux-virt \
@@ -97,18 +99,41 @@ export MOZ_WEBRENDER_SOFTWARE=1
 export LIBGL_ALWAYS_SOFTWARE=1
 export MOZ_DISABLE_AUTO_SAFE_MODE=1
 export MOZ_CRASHREPORTER_DISABLE=1
+export MOZ_DISABLE_CONTENT_SANDBOX=1
+export MOZ_DISABLE_GMP_SANDBOX=1
+export MOZ_DISABLE_GPU_SANDBOX=1
+export MOZ_DISABLE_RDD_SANDBOX=1
+export MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1
 export WLR_BACKENDS=drm
 export WLR_RENDERER=pixman
 export WLR_NO_HARDWARE_CURSORS=1
 export SEATD_SOCK=/run/seatd.sock
+profile=/tmp/wfx-profile
 
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
+rm -rf "$profile"
+mkdir -p "$profile"
+cat > "$profile/user.js" <<'PROFILE_EOF'
+user_pref("app.normandy.enabled", false);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.startup.homepage", "about:blank");
+user_pref("browser.startup.page", 0);
+user_pref("browser.urlbar.speculativeConnect.enabled", false);
+user_pref("datareporting.healthreport.uploadEnabled", false);
+user_pref("network.captive-portal-service.enabled", false);
+user_pref("network.connectivity-service.enabled", false);
+user_pref("network.http.http3.enable", false);
+user_pref("network.http.speculative-parallel-limit", 0);
+user_pref("network.predictor.enabled", false);
+user_pref("network.prefetch-next", false);
+user_pref("toolkit.telemetry.enabled", false);
+PROFILE_EOF
 
-seatd -g root -n 1 -s "$SEATD_SOCK" -l debug >/dev/console 2>&1 &
+seatd -u root -g root -l debug >/dev/console 2>&1 &
 sleep 1
 
-exec cage -- /usr/bin/waterfox about:blank >/dev/console 2>&1
+exec cage -D -- /usr/bin/waterfox -no-remote -profile "$profile" about:blank >/dev/console 2>&1
 EOF
   chmod 0755 "$rootfs/usr/local/bin/wfx-kiosk-init"
 }

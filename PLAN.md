@@ -243,16 +243,25 @@ Tranche 6 status:
   Xwayland, EGL, GLES, Vulkan, and GBM disabled.
 - `qemu-image` assembles an Alpine aarch64 rootfs image at
   `.wfx-cache/qemu/waterfox-kiosk.ext4`.
-- `qemu-run` is wired for host `qemu-system-aarch64`, but the visible kiosk boot
-  proof has not been run or accepted yet.
+- `qemu-image` now creates an `initramfs-virt`, installs BusyBox applet symlinks
+  after the no-scripts APK install, and includes the rootfs runtime packages
+  needed by cage and Waterfox (`libgcc`, `libstdc++`, and `libintl`).
+- Bounded `qemu-run` boots with both `WFX_QEMU_DISPLAY=none` and
+  `WFX_QEMU_DISPLAY=cocoa`. In both runs, the guest reaches seatd, wlroots opens
+  `/dev/dri/card0`, modesets the virtio GPU `Virtual-1` output at 1280x800, and
+  Waterfox creates Wayland surfaces and stays running until the host timeout.
+- Human-visible acceptance of the Cocoa window is still pending because this
+  tool stream cannot inspect the host display directly.
 
 Next resume actions:
 
-1. Rebuild `.wfx-cache/qemu/waterfox-kiosk.ext4` so the QEMU image includes the
-   latest staged debug Waterfox and Tranche 5 fixes.
-2. Boot `.wfx-cache/qemu/waterfox-kiosk.ext4` with `qemu-run` and capture the
-   visible kiosk proof.
-3. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
+1. Confirm whether the Cocoa QEMU window visibly rendered Waterfox during the
+   bounded `qemu-run` proof.
+2. If the Cocoa window is blank, investigate the wlroots DRM messages about
+   failed DMA-BUF import for scan-out with the pixman/DRM-dumb renderer path.
+3. Quiet the kiosk init logging once visible proof is accepted; it currently
+   keeps cage debug output on the serial console for bring-up.
+4. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
    or optimized builds until the final packaging profile is reached.
 
 ### Known Relaxations And Followups
