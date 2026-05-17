@@ -15,7 +15,9 @@
 </hbox>
 
 <!-- Waterfox Content Blocker -->
+#ifdef MOZ_WATERFOX_BLOCKER
 #include ../../../waterfox/browser/components/blocker/content/waterfoxBlockerPreferences.inc.xhtml
+#endif
 
 <!-- Tracking / Content Blocking -->
 <groupbox id="trackingGroup" data-category="panePrivacy" hidden="true" aria-describedby="contentBlockingDescription" class="highlighting-group">

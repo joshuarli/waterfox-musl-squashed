@@ -508,6 +508,15 @@ export const CustomizableWidgets = [
   },
 ];
 
+if (!AppConstants.MOZ_WATERFOX_BLOCKER) {
+  let idx = CustomizableWidgets.findIndex(
+    widget => widget.id == "waterfox-blocker-toolbar-button"
+  );
+  if (idx !== -1) {
+    CustomizableWidgets.splice(idx, 1);
+  }
+}
+
 if (Services.prefs.getBoolPref("identity.fxaccounts.enabled")) {
   CustomizableWidgets.push({
     id: "sync-button",

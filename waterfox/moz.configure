@@ -6,3 +6,19 @@
 
 imply_option("MOZ_APP_UA_NAME", "Firefox")
 imply_option("MOZ_APP_PROFILE", "Waterfox")
+
+option(
+    "--disable-waterfox-blocker",
+    default=True,
+    help="{Enable|Disable} Waterfox blocker",
+)
+
+
+@depends("--enable-waterfox-blocker")
+def waterfox_blocker(value):
+    if value:
+        return True
+
+
+set_config("MOZ_WATERFOX_BLOCKER", True, when=waterfox_blocker)
+set_define("MOZ_WATERFOX_BLOCKER", True, when=waterfox_blocker)

@@ -250,16 +250,24 @@ Tranche 6 status:
   `WFX_QEMU_DISPLAY=cocoa`. In both runs, the guest reaches seatd, wlroots opens
   `/dev/dri/card0`, modesets the virtio GPU `Virtual-1` output at 1280x800, and
   Waterfox creates Wayland surfaces and stays running until the host timeout.
-- Human-visible acceptance of the Cocoa window is still pending because this
-  tool stream cannot inspect the host display directly.
+- Human-visible Cocoa acceptance passed: the host QEMU window renders Waterfox.
+- Host terminal `Ctrl-C` now exits QEMU cleanly after switching away from the
+  stdio monitor mux and trapping `INT`/`TERM` in `qemu-run`.
+- Stage 1 now passes `--disable-waterfox-blocker`; WaterfoxBlocker should not be
+  built or registered for the musl debug build. The kiosk profile also disables
+  blocker prefs as a runtime fallback.
+- `configure` and `configure-check` pass with WaterfoxBlocker excluded. In the
+  squashed `/tmp` worktree, this required restoring the tiny
+  `waterfox/browser/locales/moz.build` metadata file because the locales
+  gitlink was otherwise empty.
 
 Next resume actions:
 
-1. Confirm whether the Cocoa QEMU window visibly rendered Waterfox during the
-   bounded `qemu-run` proof.
-2. If the Cocoa window is blank, investigate the wlroots DRM messages about
-   failed DMA-BUF import for scan-out with the pixman/DRM-dumb renderer path.
-3. Quiet the kiosk init logging once visible proof is accepted; it currently
+1. Rebuild the stage 1 debug Waterfox package so the staged root reflects the
+   new `--disable-waterfox-blocker` configuration.
+2. Investigate QEMU keyboard/mouse input: the Cocoa window renders, but user
+   input is not reaching Waterfox yet.
+3. Quiet the kiosk init logging now that visible proof is accepted; it currently
    keeps cage debug output on the serial console for bring-up.
 4. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
    or optimized builds until the final packaging profile is reached.
@@ -598,6 +606,7 @@ ac_add_options --disable-v4l2
 ac_add_options --disable-av1
 ac_add_options --disable-jxl
 ac_add_options --without-wasm-sandboxed-libraries
+ac_add_options --disable-waterfox-blocker
 ac_add_options --enable-debug
 ac_add_options --disable-optimize
 ac_add_options --enable-rust-debug

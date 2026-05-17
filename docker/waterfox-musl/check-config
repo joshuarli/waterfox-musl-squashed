@@ -46,6 +46,7 @@ reject_config_key MOZ_WEBRTC
 reject_config_key MOZ_ALSA
 reject_config_key MOZ_PULSEAUDIO
 reject_config_key MOZ_SYSTEM_PIPEWIRE
+reject_config_key MOZ_WATERFOX_BLOCKER
 reject_config_key MOZ_ENABLE_VAAPI
 reject_config_key MOZ_ENABLE_V4L2
 reject_config_key MOZ_SYNTH_SPEECHD

@@ -44,6 +44,7 @@ ac_add_options --disable-geckodriver
 ac_add_options --disable-profiling
 ac_add_options --disable-tests
 ac_add_options --disable-updater
+ac_add_options --disable-waterfox-blocker
 
 ac_add_options --disable-dbus
 ac_add_options --disable-necko-wifi

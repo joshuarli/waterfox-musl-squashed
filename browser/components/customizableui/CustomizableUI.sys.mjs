@@ -337,7 +337,9 @@ var CustomizableUIInternal = {
       "spring",
       "vertical-spacer",
       "urlbar-container",
-      "waterfox-blocker-toolbar-button",
+      AppConstants.MOZ_WATERFOX_BLOCKER
+        ? "waterfox-blocker-toolbar-button"
+        : null,
       "spring",
       "save-to-pocket-button",
       "downloads-button",
@@ -854,7 +856,7 @@ var CustomizableUIInternal = {
       }
     }
 
-    if (currentVersion < 23) {
+    if (currentVersion < 23 || !AppConstants.MOZ_WATERFOX_BLOCKER) {
       // The Waterfox blocker button was previously registered as an external
       // widget which queued it via gFuturePlacements; that path appended to
       // the navbar end. Remove any existing placement so it can be re-inserted

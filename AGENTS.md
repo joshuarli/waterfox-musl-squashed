@@ -37,8 +37,11 @@ rediscovering the same build, runtime, and QEMU issues.
 - Tranche 5: Docker headless Wayland smoke passes and verifies an
   `xdg_toplevel`.
 - Tranche 6: QEMU boots to seatd + custom cage/wlroots + Waterfox surfaces.
-  User reported Cocoa QEMU rendered on first boot. Repeat boot and interrupt
-  behavior are being tightened in `qemu-image` and `qemu-run`.
+  Cocoa QEMU visibly renders Waterfox, repeat boots no longer hit profile
+  read-only panics, and host terminal `Ctrl-C` terminates QEMU cleanly.
+  Keyboard and mouse input do not reach Waterfox yet.
+- After the WaterfoxBlocker build exclusion, rerun the stage 1 debug build and
+  package before treating QEMU logs as final.
 
 Current important local edits in this squashed tree:
 
@@ -49,6 +52,8 @@ Current important local edits in this squashed tree:
   - mounts `/run` and `/tmp` as tmpfs in the guest init
   - keeps the Waterfox profile under `/run/wfx-profile` for repeatable boots
   - disables Gecko subprocess sandboxes for the QEMU proof
+  - leaves WaterfoxBlocker disabled in the QEMU kiosk profile as a runtime
+    fallback
 - `docker/waterfox-musl/qemu-run`
   - defaults to plain serial stdio and no QEMU monitor
   - traps host `INT`/`TERM` and terminates the QEMU process
@@ -74,6 +79,11 @@ The squashed tree may not initially have all caches. If needed, reuse caches
 from `/Users/josh/d/waterfox-musl/.wfx-cache/`, but copy only what is needed for
 the task. For QEMU-only iteration, `dist/stage1-root` and `kiosk-compositor`
 are enough.
+
+The squashed `/tmp` checkout may also have `waterfox/browser/locales` as an
+empty gitlink. `./mach configure` needs `waterfox/browser/locales/moz.build`;
+initialize the submodule or restore that tiny metadata file before rerunning
+configure.
 
 ## Main Commands
 
@@ -203,14 +213,23 @@ QEMU-specific issues already solved:
   `libintl.so.8`
 - Alpine `seatd` does not support the earlier `-s` socket option
 - guest profile data must not live on the root image; use `/run/wfx-profile`
+- Stage 1 passes `--disable-waterfox-blocker`; the blocker component should not
+  be built or registered for the musl debug build. The QEMU kiosk profile also
+  keeps blocker prefs disabled as a runtime fallback.
 
 Current noisy but nonfatal QEMU output:
 
 - missing Waterfox fluent strings
-- WaterfoxBlocker tries to fetch filter lists even with a constrained profile
 - `glxtest` reports missing `libpci`/`libEGL`, expected for software rendering
 - wlroots logs `Failed to get DMA-BUF from buffer` / failed scan-out imports
   with the pixman and DRM-dumb renderer path
+
+Current QEMU functional followup:
+
+- Cocoa renders Waterfox, but keyboard and mouse input do not reach the browser.
+  Start by checking whether the guest sees QEMU input devices under
+  `/dev/input`, whether the needed virtio input modules are present, and whether
+  wlroots/libinput logs device discovery.
 
 If the Cocoa window is blank, investigate the wlroots pixman/DRM-dumb scan-out
 path first. The serial log can still show successful surface creation even if
@@ -275,8 +294,10 @@ Before claiming the plan is complete, verify:
 - debug build passed
 - package and static scans passed
 - headless Wayland smoke passed
+- WaterfoxBlocker is excluded from the musl debug build
 - QEMU image rebuilt from the current staged root
 - QEMU boots twice in a row without profile/rootfs panics
 - Cocoa QEMU visibly renders Waterfox, not just serial surface creation
 - `Ctrl-C` from a real terminal terminates QEMU cleanly
+- keyboard/mouse input reaches the guest, or the input gap is explicitly tracked
 - `PLAN.md` reflects the final status and any followups

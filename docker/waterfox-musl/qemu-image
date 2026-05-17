@@ -135,6 +135,9 @@ user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.predictor.enabled", false);
 user_pref("network.prefetch-next", false);
 user_pref("toolkit.telemetry.enabled", false);
+user_pref("waterfox.blocker.enabled", false);
+user_pref("waterfox.blocker.remoteResourcesEnabled", false);
+user_pref("waterfox.blocker.ui.enabled", false);
 PROFILE_EOF
 
 seatd -u root -g root -l debug >/dev/console 2>&1 &

@@ -9,7 +9,6 @@ DIRS += [
     "aboutwelcome",
     "aboutpasswords",
     "addonstores",
-    "blocker",
     "preferences",
     "privatetab",
     "search",
@@ -20,6 +19,9 @@ DIRS += [
     "uicustomizations",
     "utils",
 ]
+
+if CONFIG["MOZ_WATERFOX_BLOCKER"]:
+    DIRS += ["blocker"]
 
 EXTRA_JS_MODULES += [
     "WaterfoxGlue.sys.mjs",

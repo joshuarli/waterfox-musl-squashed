@@ -7,6 +7,7 @@ const lazy = {};
 ChromeUtils.defineESModuleGetters(lazy, {
   AboutPages: "resource:///modules/AboutPages.sys.mjs",
   AddonManager: "resource://gre/modules/AddonManager.sys.mjs",
+  AppConstants: "resource://gre/modules/AppConstants.sys.mjs",
   BrowserUtils: "resource:///modules/BrowserUtils.sys.mjs",
   ChromeManifest: "resource:///modules/ChromeManifest.sys.mjs",
   Overlays: "resource:///modules/Overlays.sys.mjs",
@@ -73,46 +74,48 @@ export const WaterfoxGlue = {
     // Initialize sidebar prefs handler early so it can observe pane loads
     lazy.SidebarPreferencesHandler.init();
 
-    // Register blocker window actors early so cosmetic/scriptlet hooks run for pages.
-    ChromeUtils.registerWindowActor("WaterfoxBlocker", {
-      parent: {
-        esModuleURI: "resource:///modules/WaterfoxBlockerParent.sys.mjs",
-      },
-      child: {
-        esModuleURI: "resource:///modules/WaterfoxBlockerChild.sys.mjs",
-        events: {
-          DOMWindowCreated: {},
-          DOMDocElementInserted: {},
+    if (lazy.AppConstants.MOZ_WATERFOX_BLOCKER) {
+      // Register blocker window actors early so cosmetic/scriptlet hooks run for pages.
+      ChromeUtils.registerWindowActor("WaterfoxBlocker", {
+        parent: {
+          esModuleURI: "resource:///modules/WaterfoxBlockerParent.sys.mjs",
         },
-      },
-      allFrames: true,
-      messageManagerGroups: ["browsers"],
-      // DOMWindowCreated can happen before URL match patterns settle.
-      // Keep protocol matching broad and gate to http/https inside the child.
-      remoteTypes: ["web"],
-    });
-
-    // The blocked page actor handles the "Load anyway" click so the parent
-    // can record a session permission before the navigation happens.
-    ChromeUtils.registerWindowActor("WaterfoxBlockedPage", {
-      parent: {
-        esModuleURI: "resource:///modules/WaterfoxBlockedPageParent.sys.mjs",
-      },
-      child: {
-        esModuleURI: "resource:///modules/WaterfoxBlockedPageChild.sys.mjs",
-        events: {
-          click: {},
+        child: {
+          esModuleURI: "resource:///modules/WaterfoxBlockerChild.sys.mjs",
+          events: {
+            DOMWindowCreated: {},
+            DOMDocElementInserted: {},
+          },
         },
-      },
-      matches: ["about:contentblocked?*"],
-      allFrames: true,
-    });
+        allFrames: true,
+        messageManagerGroups: ["browsers"],
+        // DOMWindowCreated can happen before URL match patterns settle.
+        // Keep protocol matching broad and gate to http/https inside the child.
+        remoteTypes: ["web"],
+      });
 
-    // Initialise blocker preferences hook, blocker panel and blocker service.
-    lazy.WaterfoxBlockerPreferences.init();
-    lazy.WaterfoxBlockerPanel.init();
-    lazy.WaterfoxBlockerService.init();
-    lazy.WaterfoxBlockerExtensionDetector.init();
+      // The blocked page actor handles the "Load anyway" click so the parent
+      // can record a session permission before the navigation happens.
+      ChromeUtils.registerWindowActor("WaterfoxBlockedPage", {
+        parent: {
+          esModuleURI: "resource:///modules/WaterfoxBlockedPageParent.sys.mjs",
+        },
+        child: {
+          esModuleURI: "resource:///modules/WaterfoxBlockedPageChild.sys.mjs",
+          events: {
+            click: {},
+          },
+        },
+        matches: ["about:contentblocked?*"],
+        allFrames: true,
+      });
+
+      // Initialise blocker preferences hook, blocker panel and blocker service.
+      lazy.WaterfoxBlockerPreferences.init();
+      lazy.WaterfoxBlockerPanel.init();
+      lazy.WaterfoxBlockerService.init();
+      lazy.WaterfoxBlockerExtensionDetector.init();
+    }
 
     // Observe chrome-document-loaded topic to detect window open
     Services.obs.addObserver(this, "chrome-document-loaded");
@@ -465,10 +468,12 @@ export const WaterfoxGlue = {
   },
 
   shutdown() {
-    lazy.WaterfoxBlockerPreferences.uninit();
-    lazy.WaterfoxBlockerPanel.uninit();
-    lazy.WaterfoxBlockerService.uninit();
-    lazy.WaterfoxBlockerExtensionDetector.uninit();
+    if (lazy.AppConstants.MOZ_WATERFOX_BLOCKER) {
+      lazy.WaterfoxBlockerPreferences.uninit();
+      lazy.WaterfoxBlockerPanel.uninit();
+      lazy.WaterfoxBlockerService.uninit();
+      lazy.WaterfoxBlockerExtensionDetector.uninit();
+    }
 
     // Shutdown TabGrouping
     lazy.TabGrouping.shutdown();
