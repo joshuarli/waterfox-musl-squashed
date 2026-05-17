@@ -13,6 +13,8 @@ accel=${WFX_QEMU_ACCEL:-hvf}
 memory=${WFX_QEMU_MEMORY:-4096}
 smp=${WFX_QEMU_SMP:-4}
 display=${WFX_QEMU_DISPLAY:-cocoa}
+serial=${WFX_QEMU_SERIAL:-stdio}
+monitor=${WFX_QEMU_MONITOR:-none}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
@@ -34,7 +36,8 @@ args=(
   -device virtio-gpu-pci
   -device virtio-keyboard-pci
   -device virtio-tablet-pci
-  -serial mon:stdio
+  -serial "$serial"
+  -monitor "$monitor"
   -display "$display"
 )
 
@@ -42,4 +45,15 @@ if [ -f "$initramfs" ]; then
   args=(-initrd "$initramfs" "${args[@]}")
 fi
 
-exec "$qemu" "${args[@]}"
+"$qemu" "${args[@]}" &
+qemu_pid=$!
+
+terminate_qemu() {
+  trap - INT TERM
+  kill -TERM "$qemu_pid" 2>/dev/null || true
+  wait "$qemu_pid" 2>/dev/null || true
+  exit 130
+}
+
+trap terminate_qemu INT TERM
+wait "$qemu_pid"

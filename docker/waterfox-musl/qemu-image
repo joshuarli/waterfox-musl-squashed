@@ -74,7 +74,8 @@ install_payloads() {
 }
 
 install_kiosk_init() {
-  mkdir -p "$rootfs/usr/local/bin" "$rootfs/var/log"
+  mkdir -p "$rootfs/usr/local/bin" "$rootfs/dev/pts" "$rootfs/run" "$rootfs/tmp" "$rootfs/var/log"
+  chmod 1777 "$rootfs/tmp"
   cat > "$rootfs/usr/local/bin/wfx-kiosk-init" <<'EOF'
 #!/bin/sh
 set -eu
@@ -85,8 +86,14 @@ mount -t devtmpfs devtmpfs /dev || true
 mount -o remount,rw / || true
 mkdir -p /dev/pts /run /tmp /var/log
 mount -t devpts devpts /dev/pts || true
-mount -t tmpfs tmpfs /run || true
+mountpoint -q /run || mount -t tmpfs tmpfs /run
+mountpoint -q /tmp || mount -t tmpfs tmpfs /tmp
 chmod 1777 /tmp
+if ! touch /run/.wfx-write-test 2>/dev/null; then
+  echo "wfx-kiosk-init: /run is not writable" >/dev/console
+  exit 1
+fi
+rm -f /run/.wfx-write-test
 
 export PATH=/opt/wfx/kiosk-compositor/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LD_LIBRARY_PATH=/opt/wfx/kiosk-compositor/lib:/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
@@ -108,7 +115,7 @@ export WLR_BACKENDS=drm
 export WLR_RENDERER=pixman
 export WLR_NO_HARDWARE_CURSORS=1
 export SEATD_SOCK=/run/seatd.sock
-profile=/tmp/wfx-profile
+profile=/run/wfx-profile
 
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
