@@ -30,6 +30,9 @@ The external runtime contract is from
   runtime libraries.
 - Tolerate Alpine installing GCC packages only as dormant transitive package
   dependencies of clang/rust if edge requires them.
+- Waterfox build-time dependencies may come from Alpine edge packages. The
+  custom `/opt/wfx/sysroot` is the stage 1 runtime closure used for packaging
+  and run/smoke verification, not a mandatory SDK for `./mach build`.
 - Target `aarch64-unknown-linux-musl`.
 - Build and package for Linux arm64, not macOS.
 - Build Waterfox against a Wayland-only GTK3 stack.
@@ -39,7 +42,8 @@ The external runtime contract is from
 - Stage 1 has no audio. PipeWire audio is a later profile and artifact.
 - Compile mimalloc v3 into the browser allocator path statically.
 - Use fast mimalloc settings with secure mode off.
-- Use Rust debug/dev builds for iteration; do not use Rust release builds until
+- Use debug/dev builds for iteration: Gecko debug enabled, optimization
+  disabled, and Rust debug enabled. Do not use release or optimized builds until
   the final packaging profile.
 - Dynamically fetched sources and build artifacts must live under ignored,
   host-mounted cache directories so Docker iteration on macOS does not refetch
@@ -117,6 +121,8 @@ tracked source file:
 - `.wfx-cache/apk`: APK package cache for Docker image and container work.
 - `.wfx-cache/sources`: downloaded upstream source archives.
 - `.wfx-cache/build`: unpacked and intermediate dependency builds.
+- `.wfx-cache/build-deps`: source-built build-only inputs that Alpine does not
+  provide in the required version.
 - `.wfx-cache/sysroot`: installed custom Wayland/GTK sysroot.
 - `.wfx-cache/mozbuild`: Gecko build state.
 - `.wfx-cache/sccache`: C/C++ and Rust compiler cache.
@@ -137,14 +143,19 @@ Waterfox tree, so image iteration does not upload the browser checkout.
 
 - Tranche 1 is implemented: Docker image, wrapper, cache layout, and stage 1
   mozconfig exist.
-- Tranche 2 is implemented far enough for the stage 1 configure/build loop:
+- Tranche 2 is implemented far enough for the stage 1 runtime-closure loop:
   `docker/waterfox-musl/wfx-musl sysroot` builds the source-locked sysroot
-  libraries used by configure into `.wfx-cache/sysroot`.
-- The current compiled sysroot set covers zlib, expat, libffi, pcre2, libpng,
-  libjpeg-turbo, mimalloc v3, freetype, fontconfig, fribidi, harfbuzz, pixman,
-  cairo, glib, pango, shared-mime-info, gdk-pixbuf, atk/at-spi compatibility,
-  wayland, wayland-protocols, xkeyboard-config, libxkbcommon, libepoxy, Mesa,
-  and GTK 3.
+  libraries used by packaging and smoke/runtime verification into
+  `.wfx-cache/sysroot`. These libraries are not required to satisfy Waterfox
+  build-time pkg-config checks.
+- The current compiled runtime sysroot set covers zlib, expat, libffi, pcre2,
+  libpng, libjpeg-turbo, freetype, fontconfig, fribidi, harfbuzz, pixman, cairo,
+  glib, pango, shared-mime-info, gdk-pixbuf, atk/at-spi compatibility, wayland,
+  wayland-protocols, xkeyboard-config, libxkbcommon, libepoxy, Mesa, and GTK 3.
+- Mimalloc v3 is built from the source lock as a build-only static dependency
+  under `.wfx-cache/build-deps`, because Alpine edge currently provides
+  mimalloc v2 packages only and Waterfox links the v3 allocator shim
+  statically.
 - `docker/waterfox-musl/wfx-musl check` scans the generated sysroot for rejected
   libraries.
 - `docker/waterfox-musl/wfx-musl sysroot-smoke` compiles and runs a small
@@ -199,14 +210,14 @@ that relaxation:
 
 Next resume actions:
 
-1. Continue with the `style` binding blocker. The likely fastest path is to
-   teach
-   `servo/components/style/build_gecko.rs` to inject raw lines into bindgen's
-   `root` and `root::mozilla` modules, then manually define the fieldful Rust
-   layouts for the small set of Gecko structs that clang22 bindgen emits as
-   fieldless.
-2. Keep using Rust debug/dev builds for iteration. Do not run release builds
-   until the final packaging profile is reached.
+1. Revisit the build wrapper and mozconfig with the corrected sysroot boundary:
+   allow Alpine edge packages to satisfy Waterfox build-time pkg-config checks,
+   while reserving `/opt/wfx/sysroot` for packaged runtime libraries and
+   smoke/runtime verification.
+2. Continue with any remaining `style` binding blocker only after confirming it
+   still reproduces under the corrected build-time dependency model.
+3. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
+   or optimized builds until the final packaging profile is reached.
 
 ### Tranche 1: Scaffolding And Toolchain Image
 
@@ -252,8 +263,11 @@ This tranche gets `./mach configure` passing inside Docker.
 
 Deliverables:
 
-- Build Waterfox using the custom sysroot and stage 1 mozconfig.
+- Build Waterfox with Alpine edge build-time dependencies and the stage 1
+  mozconfig.
 - Package `/opt/waterfox`.
+- Bundle or otherwise provide the custom `/opt/wfx/sysroot` runtime closure
+  needed to run the packaged Waterfox in the stage 1 environment.
 - Add `/usr/bin/waterfox` wrapper content for Laputa packaging.
 - Generate the artifact manifest.
 - Run static dependency checks over every executable and shared object.
@@ -310,6 +324,9 @@ The image installs the minimum practical build tools for early iteration:
 - nasm, yasm
 - linux-headers
 - pax-utils
+- Alpine GTK/Wayland development packages for Waterfox configure/build checks;
+  final runtime acceptance is still enforced against `/opt/waterfox` and the
+  custom runtime closure.
 
 It intentionally avoids `build-base` and does not install gcc directly.
 Alpine edge currently pulls GCC-related packages transitively through clang and
@@ -363,17 +380,19 @@ Source cache:
 /cache/sources
 ```
 
-Use `PKG_CONFIG_LIBDIR` to point only at the custom sysroot:
+Use `PKG_CONFIG_LIBDIR` to point only at the custom sysroot when building or
+scanning the custom runtime closure itself:
 
 ```sh
 PKG_CONFIG_LIBDIR=/opt/wfx/sysroot/lib/pkgconfig:/opt/wfx/sysroot/share/pkgconfig
 PKG_CONFIG_SYSROOT_DIR=
 ```
 
-Do not allow `/usr/lib/pkgconfig` or `/usr/share/pkgconfig` to satisfy runtime
-library checks for Waterfox. Build tools from `/usr` are fine; runtime
-libraries that will be linked into Waterfox must come from the custom sysroot
-or from bundled Gecko sources.
+Do not force this setting for Waterfox `./mach configure` or `./mach build`.
+Waterfox build-time pkg-config checks may use Alpine packages from `/usr`.
+The custom sysroot is validated when assembling and smoke-testing the final
+stage 1 runtime closure. Final acceptance checks reject forbidden libraries in
+both `/opt/waterfox` and the custom runtime closure.
 
 ### Sysroot Source Set
 
@@ -502,8 +521,6 @@ Fast/minimal stage 1 options:
 
 ```sh
 ac_add_options --disable-crashreporter
-ac_add_options --disable-debug
-ac_add_options --disable-debug-symbols
 ac_add_options --disable-dmd
 ac_add_options --disable-geckodriver
 ac_add_options --disable-profiling
@@ -519,7 +536,9 @@ ac_add_options --disable-ffmpeg
 ac_add_options --disable-av1
 ac_add_options --disable-jxl
 ac_add_options --without-wasm-sandboxed-libraries
-ac_add_options --enable-optimize="-O1 -g0 -w"
+ac_add_options --enable-debug
+ac_add_options --disable-optimize
+ac_add_options --enable-rust-debug
 ```
 
 New options to add in tranche 3:
@@ -528,7 +547,7 @@ New options to add in tranche 3:
 ac_add_options --enable-audio-backends=none
 ac_add_options --disable-webmidi-midir
 ac_add_options --enable-mimalloc-replace
-ac_add_options --with-mimalloc-prefix=/opt/wfx/sysroot
+ac_add_options --with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc
 ```
 
 Do not enable Alpine system NSS, NSPR, SQLite, ICU, media codec, or other
@@ -590,7 +609,7 @@ Integration approach:
 - Use fast non-secure options in the iterative build; final packaging can
   revisit allocator tuning.
 - Disable secure mode.
-- Install headers and the static archive into `/opt/wfx/sysroot`.
+- Install headers and the static archive into `/opt/wfx/build-deps/mimalloc`.
 - Add `memory/replace/mimalloc/` with a replace-malloc shim.
 - Add `MOZ_MIMALLOC_REPLACE`.
 - Link the mimalloc replace implementation statically.
@@ -700,6 +719,8 @@ glX
 Configure assertions:
 
 - `MOZ_WAYLAND=1`
+- `MOZ_DEBUG=1`
+- `MOZ_OPTIMIZE` absent
 - `MOZ_X11` absent
 - `MOZ_ENABLE_DBUS` absent
 - `NECKO_WIFI` absent

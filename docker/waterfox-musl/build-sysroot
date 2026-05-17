@@ -195,14 +195,16 @@ build_libffi() {
 
 build_mimalloc() {
   local dir
-  already_built mimalloc && return 0
+  if already_built mimalloc && [ -f "$prefix/lib/libmimalloc.a" ]; then
+    return 0
+  fi
   fetch_source mimalloc
   dir=$(unpack_source mimalloc)
   cmake \
     -S "$dir" \
     -B "$dir/build-wfx" \
     -G Ninja \
-    -DCMAKE_BUILD_TYPE=Debug \
+    -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX="$prefix" \
     -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_C_COMPILER="$CC" \
@@ -741,6 +743,10 @@ case "${1:-build-initial}" in
   build-initial)
     build_initial
     ;;
+  build-mimalloc)
+    require_clang
+    build_mimalloc
+    ;;
   scan)
     clean_sysroot
     scan_sysroot
@@ -750,7 +756,7 @@ case "${1:-build-initial}" in
     smoke_compile
     ;;
   *)
-    printf 'usage: build-sysroot [build-initial|scan|smoke]\n' >&2
+    printf 'usage: build-sysroot [build-initial|build-mimalloc|scan|smoke]\n' >&2
     exit 2
     ;;
 esac

@@ -19,11 +19,9 @@ export SCCACHE_DIR=/cache/sccache
 export CARGO_HOME=/cache/cargo
 export CARGO_BUILD_JOBS="${WFX_CARGO_JOBS:-4}"
 export RUSTC_OPT_LEVEL=0
-export PKG_CONFIG_LIBDIR=/opt/wfx/sysroot/lib/pkgconfig:/opt/wfx/sysroot/share/pkgconfig
-export PKG_CONFIG_SYSROOT_DIR=
-export CFLAGS="-O1 -g0 -w"
-export CXXFLAGS="-O1 -g0 -w"
-export LDFLAGS="-fuse-ld=mold -Wl,-rpath-link,/opt/wfx/sysroot/lib"
+export CFLAGS="-O0 -g0 -w"
+export CXXFLAGS="-O0 -g0 -w"
+export LDFLAGS="-fuse-ld=mold"
 
 mk_add_options AUTOCLOBBER=1
 mk_add_options MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl
@@ -37,8 +35,7 @@ ac_add_options --enable-linker=mold
 ac_add_options --with-ccache=sccache
 
 ac_add_options --disable-crashreporter
-ac_add_options --disable-debug
-ac_add_options --disable-debug-symbols
+ac_add_options --enable-debug
 ac_add_options --disable-dmd
 ac_add_options --disable-geckodriver
 ac_add_options --disable-profiling
@@ -55,14 +52,14 @@ ac_add_options --disable-ffmpeg
 ac_add_options --disable-av1
 ac_add_options --disable-jxl
 ac_add_options --without-wasm-sandboxed-libraries
-ac_add_options --enable-optimize="-O1 -g0 -w"
+ac_add_options --disable-optimize
 ac_add_options --enable-rust-debug
 
 # Added in the Gecko patch tranche.
 ac_add_options --enable-audio-backends=none
 ac_add_options --disable-webmidi-midir
 ac_add_options --enable-mimalloc-replace
-ac_add_options --with-mimalloc-prefix=/opt/wfx/sysroot
+ac_add_options --with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc
 
 ac_add_options --with-app-basename=Waterfox
 ac_add_options --with-app-name=waterfox

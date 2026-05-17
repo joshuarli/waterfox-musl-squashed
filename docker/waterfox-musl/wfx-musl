@@ -35,6 +35,7 @@ ensure_cache_dirs() {
     "$cache_dir/apk" \
     "$cache_dir/sources" \
     "$cache_dir/build" \
+    "$cache_dir/build-deps" \
     "$cache_dir/sysroot" \
     "$cache_dir/mozbuild" \
     "$cache_dir/sccache" \
@@ -64,6 +65,7 @@ run_in_image() {
     --platform "$platform" \
     --volume "$repo_root:/work" \
     --volume "$cache_dir:/cache" \
+    --volume "$cache_dir/build-deps:/opt/wfx/build-deps" \
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
@@ -87,6 +89,7 @@ run_shell() {
     --platform "$platform" \
     --volume "$repo_root:/work" \
     --volume "$cache_dir:/cache" \
+    --volume "$cache_dir/build-deps:/opt/wfx/build-deps" \
     --volume "$cache_dir/sysroot:/opt/wfx/sysroot" \
     --volume "$cache_dir/apk:/var/cache/apk" \
     --workdir /work \
@@ -199,10 +202,10 @@ case "$command" in
     run_in_image /work/docker/waterfox-musl/check-config
     ;;
   configure)
-    run_in_image sh -euc './mach configure && /work/docker/waterfox-musl/check-config'
+    run_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && /work/docker/waterfox-musl/check-config'
     ;;
   build)
-    run_in_image sh -euc './mach configure && /work/docker/waterfox-musl/check-config && ./mach build'
+    run_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package)
     run_in_image ./mach package

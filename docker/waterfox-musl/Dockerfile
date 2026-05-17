@@ -29,34 +29,56 @@ RUN --mount=type=cache,target=/var/cache/apk \
       findutils \
       flex \
       gettext-dev \
+      bsd-compat-headers \
+      cairo-dev \
+      fontconfig-dev \
+      freetype-dev \
+      fribidi-dev \
+      gdk-pixbuf-dev \
+      glib-dev \
+      gtk+3.0-dev \
       gperf \
       git \
+      harfbuzz-dev \
       libc++-dev \
+      libepoxy-dev \
+      libffi-dev \
+      libjpeg-turbo-dev \
+      libpng-dev \
       libtool \
+      libxkbcommon-dev \
       linux-headers \
       lld22 \
       llvm22 \
       llvm22-dev \
       m4 \
       make \
+      mesa-dev \
       meson \
       mold \
       nasm \
       ninja-build \
       nodejs-current \
+      pango-dev \
       patch \
       pax-utils \
+      pcre2-dev \
+      pixman-dev \
       perl \
       pkgconf \
+      py3-zstandard \
       python3 \
       python3-dev \
       rsync \
       sccache \
       tar \
       unzip \
+      wayland-dev \
+      wayland-protocols \
       xz \
       yasm \
       zip \
+      zlib-dev \
       zstd && \
     update-ca-certificates
 

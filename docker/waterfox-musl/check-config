@@ -32,10 +32,12 @@ require_file "$config"
 require_file "$log"
 
 require_config MOZ_WAYLAND 1
+require_config MOZ_DEBUG 1
 require_config MOZ_AUDIO_BACKENDS_NONE 1
 require_config MOZ_MIMALLOC_REPLACE 1
-require_config WFX_MIMALLOC_PREFIX /opt/wfx/sysroot
+require_config WFX_MIMALLOC_PREFIX /opt/wfx/build-deps/mimalloc
 
+reject_config_key MOZ_OPTIMIZE
 reject_config_key MOZ_X11
 reject_config_key MOZ_ENABLE_DBUS
 reject_config_key NECKO_WIFI
