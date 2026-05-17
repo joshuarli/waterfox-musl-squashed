@@ -2,7 +2,24 @@ diff --git a/cage.c b/cage.c
 index 7519f29..ed8e6ca 100644
 --- a/cage.c
 +++ b/cage.c
-@@ -588,8 +588,8 @@ main(int argc, char *argv[])
+@@ -278,15 +278,11 @@ main(int argc, char *argv[])
+ int
+ main(int argc, char *argv[])
+ {
+-	struct cg_server server = {.log_level = WLR_INFO};
++	struct cg_server server = {.log_level = WLR_ERROR};
+ 	struct wl_event_source *sigchld_source = NULL;
+ 	pid_t pid = 0;
+ 	int ret = 0, app_ret = 0;
+ 
+-#ifdef DEBUG
+-	server.log_level = WLR_DEBUG;
+-#endif
+-
+ 	if (!parse_args(&server, argc, argv)) {
+ 		return 1;
+ 	}
+@@ -588,8 +584,8 @@ main(int argc, char *argv[])
  		struct wlr_xcursor *xcursor = wlr_xcursor_manager_get_xcursor(xcursor_manager, DEFAULT_XCURSOR, 1);
  		if (xcursor) {
  			struct wlr_xcursor_image *image = xcursor->images[0];

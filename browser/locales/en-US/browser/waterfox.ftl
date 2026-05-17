@@ -1,0 +1,168 @@
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+## Restart Prompt
+
+restart-prompt-question = Are you sure that you want to restart { -brand-short-name }?
+restart-prompt-title = Restart { -brand-short-name }
+
+## App Menu
+
+appmenuitem-restart-browser =
+    .label = Restart
+
+## Tab Context Menu
+
+copy-all-urls =
+    .label = Copy All Tab Links
+copy-url =
+    .label = Copy Tab Link
+unload-tab =
+    .label = Unload Tab
+
+## Private Tab
+
+new-private-tab =
+    .label = New Private Tab
+    .tooltiptext = Open a new private tab
+open-all-links-private =
+    .label = Open All Links in Private Tabs
+open-all-private =
+    .label = Open All in Private Tabs
+open-link-private =
+    .label = Open Link in New Private Tab
+open-private-tab =
+    .label = Open in a New Private Tab
+# Variables:
+#   $isPrivate (Boolean) - Whether the selected tab is private.
+private-tab =
+    .label =
+        { $isPrivate ->
+            [true] Exit Private Tab
+            *[false] Make Private Tab
+        }
+
+## Status Bar
+
+status-bar =
+    .label = Status Bar
+
+## about:preferences
+
+update-application-manual =
+    .label = Never check for updates (not recommended)
+    .accesskey = N
+
+bookmarks-bar-position-header = Bookmarks Toolbar Position
+bookmarks-position-bottom =
+    .label = Bottom
+bookmarks-position-top =
+    .label = Top
+
+dynamic-theme-header = Dynamic Themes
+dynamic-theme-auto =
+    .label = Dynamically Set Light/Dark Mode
+dynamic-theme-dark =
+    .label = Force Dark Mode
+dynamic-theme-light =
+    .label = Force Light Mode
+
+geolocation-api-header = Geolocation API
+geolocation-description = Some websites require your location to function. If a website is not functioning because it cannot find your location, enable this preference and try again.
+geolocation-api-enabled =
+    .label = Enable
+geolocation-api-disabled =
+    .label = Disable
+
+restart-header = Restart Menu Item
+restart-purge-cache =
+    .label = Clear fast restart cache on browser restart
+restart-require-confirmation =
+    .label = Require restart confirmation
+restart-show-button =
+    .label = Show restart button in PanelUI
+
+statusbar-header = Status Bar
+statusbar-contrast-text =
+    .label = Contrast status bar text colour
+statusbar-enabled =
+    .label = Show Status Bar
+statusbar-show-links =
+    .label = Show links
+
+tab-additional-header = Additional Tab Preferences
+insert-after-current =
+    .label = Insert new tab after current tab
+insert-related-after-current =
+    .label = Insert related new tab after current tab
+pinned-icon-only =
+    .label = Shrink pinned tabs to display only the site icon
+
+tab-feature-header = Tab Context Menu
+enable-copy-active-tab =
+    .label = Copy URL only from active tab
+show-copy-all-urls =
+    .label = Show copy all tab urls menu item
+show-copy-url =
+    .label = Show copy tab url menu item
+show-duplicate-tab =
+    .label = Show duplicate tab menu item
+show-unload-tab =
+    .label = Show unload tab menu item
+
+tab-position-header = Tab Bar Position
+tab-bar-bottom-above =
+    .label = Bottom above status bar
+tab-bar-bottom-below =
+    .label = Bottom below status bar
+tab-bar-top-above =
+    .label = Top above address bar
+tab-bar-top-below =
+    .label = Top below address bar
+
+enable-javascript =
+    .label = Enable JavaScript
+load-images =
+    .label = Load images automatically
+
+ref-header = HTTP Referrer Header
+send-referrer-header-0 =
+    .label = Never send the referrer header
+send-referrer-header-1 =
+    .label = Include the referrer header only when clicking links and similar elements
+send-referrer-header-2 =
+    .label = Include the referrer header on all requests (Default)
+
+webrtc-header = WebRTC peer connection
+enable-webrtc-p2p =
+    .label = Enable WebRTC peer connection
+
+pane-theme-title = Look & Feel
+category-theme =
+    .tooltiptext = { pane-theme-title }
+
+animation-header = Animations
+appearance-header = Appearance
+autohide-hidden-header = Auto Hide & Hidden
+bookmark-header = Bookmarks Bar
+center-header = Center
+font-header = Fonts
+full-screen-header = Full screen
+icons-header = Icons
+interface-component-header = Interface Components
+media-player-header = Media Player
+nav-bar-header = Nav Bar
+panels-header = Panels
+rounding-header = Rounding
+sidebar-header = Sidebar
+tab-bar-header = Tab Bar
+theme-header = Theme
+
+preset-title = Presets
+lepton-style =
+    .label = Lepton Style
+proton-style =
+    .label = Proton Style
+waterfox-defaults =
+    .label = Waterfox Defaults

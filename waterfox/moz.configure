@@ -16,9 +16,8 @@ option(
 
 @depends("--enable-waterfox-blocker")
 def waterfox_blocker(value):
-    if value:
-        return True
+    return bool(value)
 
 
-set_config("MOZ_WATERFOX_BLOCKER", True, when=waterfox_blocker)
+set_config("MOZ_WATERFOX_BLOCKER", waterfox_blocker)
 set_define("MOZ_WATERFOX_BLOCKER", True, when=waterfox_blocker)

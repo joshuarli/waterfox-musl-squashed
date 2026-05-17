@@ -245,31 +245,70 @@ Tranche 6 status:
   `.wfx-cache/qemu/waterfox-kiosk.ext4`.
 - `qemu-image` now creates an `initramfs-virt`, installs BusyBox applet symlinks
   after the no-scripts APK install, and includes the rootfs runtime packages
-  needed by cage and Waterfox (`libgcc`, `libstdc++`, and `libintl`).
+  needed by cage and Waterfox (`libgcc`, `libstdc++`, `libintl`, GTK 3, and
+  MIME/pixbuf data). It also includes Mesa EGL/GLES, Gallium software drivers,
+  `libpciaccess`, and `pciutils-libs` for Waterfox's GL probing/runtime path.
 - Bounded `qemu-run` boots with both `WFX_QEMU_DISPLAY=none` and
   `WFX_QEMU_DISPLAY=cocoa`. In both runs, the guest reaches seatd, wlroots opens
-  `/dev/dri/card0`, modesets the virtio GPU `Virtual-1` output at 1280x800, and
+  `/dev/dri/card0`, modesets the virtio GPU `Virtual-1` output, and
   Waterfox creates Wayland surfaces and stays running until the host timeout.
 - Human-visible Cocoa acceptance passed: the host QEMU window renders Waterfox.
 - Host terminal `Ctrl-C` now exits QEMU cleanly after switching away from the
   stdio monitor mux and trapping `INT`/`TERM` in `qemu-run`.
+- QEMU user networking is enabled by default through `WFX_QEMU_NETWORK=user`.
+  Serial boot verifies DHCP lease `10.0.2.15` from `10.0.2.2`; use
+  `WFX_QEMU_NETWORK=none` for an intentionally offline boot.
+- QEMU input now defaults to virtio keyboard/tablet devices, with `usb`, `both`,
+  and `none` selectable through `WFX_QEMU_INPUT`. The guest init loads input
+  modules, starts udev, triggers device discovery, and brings up DHCP before
+  starting cage. Serial boot verified virtio creates `event0` and `event1`.
+  Cage must run with `WLR_BACKENDS=drm,libinput`; `drm` alone creates the output
+  but never attaches the input backend. After switching to `drm,libinput`,
+  serial boot verifies wlroots opens both event devices and adds the QEMU Virtio
+  Keyboard and QEMU Virtio Tablet.
+- `qemu-run` defaults the virtio GPU mode to 1600x1000. Override with
+  `WFX_QEMU_WIDTH` and `WFX_QEMU_HEIGHT`; serial boot verifies 1600x1000 is the
+  preferred mode.
+- The Cage patch keeps debugoptimized binaries but no longer lets `DEBUG` force
+  wlroots debug logging at runtime. The repeated `Direct scan-out disabled by
+  software cursor` serial spam is gone; `-D` remains the explicit Cage debug
+  logging opt-in.
 - Stage 1 now passes `--disable-waterfox-blocker`; WaterfoxBlocker should not be
   built or registered for the musl debug build. The kiosk profile also disables
   blocker prefs as a runtime fallback.
-- `configure` and `configure-check` pass with WaterfoxBlocker excluded. In the
-  squashed `/tmp` worktree, this required restoring the tiny
-  `waterfox/browser/locales/moz.build` metadata file because the locales
-  gitlink was otherwise empty.
+- `configure`, `configure-check`, the stage 1 debug build, and packaging pass
+  with WaterfoxBlocker excluded. In the squashed `/tmp` worktree, this required
+  restoring the tiny `waterfox/browser/locales/moz.build` metadata file because
+  the locales gitlink was otherwise empty.
+- The staged artifact scan finds no WaterfoxBlocker filenames or registration
+  strings under `.wfx-cache/dist/stage1-root`.
+- The QEMU image was rebuilt from the current staged root after the
+  WaterfoxBlocker exclusion and runtime cache changes. A bounded serial boot
+  confirmed virtio input devices, Cage startup, Waterfox surfaces, and no GTK
+  pixbuf crash before the host timeout stopped QEMU.
+- Mouse input was manually verified in the Cocoa QEMU window. Keyboard events
+  now work in the Cocoa QEMU window. Before the latest Mesa runtime additions,
+  typed URL bar text submitted but did not visibly repaint. Keyboard events
+  initially exposed URL bar exceptions because
+  `browser/waterfox.ftl` was missing from the packaged locale bundle. Adding the
+  en-US Waterfox Fluent resource, rebuilding, repackaging, and rebuilding the
+  QEMU image removed the missing-resource flood and the serial scan no longer
+  shows the earlier `selectedBrowser`, `userTypedValue`, or `UrlbarInput`
+  exceptions.
+- The kiosk profile disables TRR/DoH, ORB JavaScript validation, and the backup
+  service for this proof image. That keeps DNS native under QEMU user
+  networking and avoids a debug-only JSOracle utility-process assertion. It
+  also disables chrome/content console-to-stdout prefs, which removes
+  `console.debug` output from the serial log.
 
 Next resume actions:
 
-1. Rebuild the stage 1 debug Waterfox package so the staged root reflects the
-   new `--disable-waterfox-blocker` configuration.
-2. Investigate QEMU keyboard/mouse input: the Cocoa window renders, but user
-   input is not reaching Waterfox yet.
-3. Quiet the kiosk init logging now that visible proof is accepted; it currently
-   keeps cage debug output on the serial console for bring-up.
-4. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
+1. Manually verify whether URL bar typed text now visibly repaints in the Cocoa
+   QEMU window after adding Mesa EGL/GLES runtime libraries.
+2. Decide whether to filter or fix remaining Gecko debug-build warning spam
+   (`PuppetWidget without Tab`, bundled sidebar extension errors) or leave it
+   as useful debug output.
+3. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
    or optimized builds until the final packaging profile is reached.
 
 ### Known Relaxations And Followups
@@ -893,8 +932,10 @@ QEMU target:
 - HVF acceleration on macOS when available
 - virtio block device
 - virtio GPU
-- virtio keyboard
-- virtio tablet or mouse
+- virtio keyboard/tablet by default, with USB HID input available through
+  `WFX_QEMU_INPUT=usb`
+- default 1600x1000 virtio GPU mode, adjustable with `WFX_QEMU_WIDTH` and
+  `WFX_QEMU_HEIGHT`
 - serial console log
 - Cocoa display for manual runs
 - Optional VNC or screenshot mode for automated proof

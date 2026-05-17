@@ -38,6 +38,7 @@ install_rootfs_packages() {
       eudev-libs \
       font-dejavu \
       fontconfig \
+      gtk+3.0 \
       hwdata \
       libdisplay-info \
       libdrm \
@@ -45,17 +46,26 @@ install_rootfs_packages() {
       libgcc \
       libinput \
       libintl \
+      libpciaccess \
       libseat \
       libstdc++ \
       libxkbcommon \
       linux-firmware-none \
       linux-virt \
+      mesa-dri-gallium \
+      mesa-egl \
+      mesa-gles \
       mtdev \
       openrc \
       pixman \
+      pciutils-libs \
       seatd \
+      shared-mime-info \
       wayland >/dev/null
   chroot "$rootfs" /bin/busybox --install -s
+  mkdir -p "$rootfs/usr/lib/gdk-pixbuf-2.0/2.10.0"
+  chroot "$rootfs" /usr/bin/gdk-pixbuf-query-loaders --update-cache >/dev/null 2>&1 || true
+  chroot "$rootfs" /usr/bin/update-mime-database /usr/share/mime >/dev/null 2>&1 || true
 }
 
 install_payloads() {
@@ -96,6 +106,27 @@ fi
 rm -f /run/.wfx-write-test
 
 export PATH=/opt/wfx/kiosk-compositor/bin:/usr/sbin:/usr/bin:/sbin:/bin
+mkdir -p /run/udev
+for module in evdev virtio_input virtio_net hid hid_generic usbhid xhci_hcd xhci_pci; do
+  if ! modprobe "$module" >/dev/console 2>&1; then
+    echo "wfx-kiosk-init: failed to load module $module" >/dev/console
+  fi
+done
+udevd --daemon 2>/dev/console || true
+udevadm trigger --action=add 2>/dev/console || true
+udevadm settle --timeout=5 2>/dev/console || true
+ip link set lo up >/dev/console 2>&1 || true
+for iface in /sys/class/net/*; do
+  iface=${iface##*/}
+  [ "$iface" != lo ] || continue
+  ip link set "$iface" up >/dev/console 2>&1 || true
+  udhcpc -q -n -i "$iface" >/dev/console 2>&1 || echo "wfx-kiosk-init: DHCP failed on $iface" >/dev/console
+  break
+done
+mkdir -p /usr/lib/gdk-pixbuf-2.0/2.10.0
+gdk-pixbuf-query-loaders --update-cache >/dev/console 2>&1 || true
+update-mime-database /usr/share/mime >/dev/console 2>&1 || true
+
 export LD_LIBRARY_PATH=/opt/wfx/kiosk-compositor/lib:/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 export XDG_RUNTIME_DIR=/run/user/0
 export WAYLAND_DISPLAY=wayland-0
@@ -111,7 +142,8 @@ export MOZ_DISABLE_GMP_SANDBOX=1
 export MOZ_DISABLE_GPU_SANDBOX=1
 export MOZ_DISABLE_RDD_SANDBOX=1
 export MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1
-export WLR_BACKENDS=drm
+export MALLOC_OPTIONS=R
+export WLR_BACKENDS=drm,libinput
 export WLR_RENDERER=pixman
 export WLR_NO_HARDWARE_CURSORS=1
 export SEATD_SOCK=/run/seatd.sock
@@ -123,27 +155,44 @@ rm -rf "$profile"
 mkdir -p "$profile"
 cat > "$profile/user.js" <<'PROFILE_EOF'
 user_pref("app.normandy.enabled", false);
+user_pref("browser.backup.enabled", false);
+user_pref("browser.dom.window.dump.enabled", false);
+user_pref("browser.opaqueResponseBlocking.javascriptValidator", false);
 user_pref("browser.shell.checkDefaultBrowser", false);
 user_pref("browser.startup.homepage", "about:blank");
 user_pref("browser.startup.page", 0);
 user_pref("browser.urlbar.speculativeConnect.enabled", false);
 user_pref("datareporting.healthreport.uploadEnabled", false);
+user_pref("devtools.console.stdout.chrome", false);
+user_pref("devtools.console.stdout.content", false);
 user_pref("network.captive-portal-service.enabled", false);
 user_pref("network.connectivity-service.enabled", false);
+user_pref("network.dns.disableIPv6", true);
 user_pref("network.http.http3.enable", false);
 user_pref("network.http.speculative-parallel-limit", 0);
 user_pref("network.predictor.enabled", false);
 user_pref("network.prefetch-next", false);
+user_pref("network.trr.bootstrapAddress", "");
+user_pref("network.trr.mode", 5);
+user_pref("network.trr.uri", "");
 user_pref("toolkit.telemetry.enabled", false);
 user_pref("waterfox.blocker.enabled", false);
 user_pref("waterfox.blocker.remoteResourcesEnabled", false);
 user_pref("waterfox.blocker.ui.enabled", false);
 PROFILE_EOF
 
-seatd -u root -g root -l debug >/dev/console 2>&1 &
+seatd -u root -g root -l error >/dev/console 2>&1 &
 sleep 1
 
-exec cage -D -- /usr/bin/waterfox -no-remote -profile "$profile" about:blank >/dev/console 2>&1
+cage -- /usr/bin/waterfox -no-remote -profile "$profile" about:blank >/dev/console 2>&1 &
+cage_pid=$!
+status=0
+wait "$cage_pid" || status=$?
+echo "wfx-kiosk-init: cage exited with status $status" >/dev/console
+poweroff -f >/dev/console 2>&1 || true
+while :; do
+  sleep 3600
+done
 EOF
   chmod 0755 "$rootfs/usr/local/bin/wfx-kiosk-init"
 }

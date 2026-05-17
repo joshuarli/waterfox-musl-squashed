@@ -15,6 +15,10 @@ smp=${WFX_QEMU_SMP:-4}
 display=${WFX_QEMU_DISPLAY:-cocoa}
 serial=${WFX_QEMU_SERIAL:-stdio}
 monitor=${WFX_QEMU_MONITOR:-none}
+input=${WFX_QEMU_INPUT:-virtio}
+width=${WFX_QEMU_WIDTH:-1600}
+height=${WFX_QEMU_HEIGHT:-1000}
+network=${WFX_QEMU_NETWORK:-user}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
@@ -33,13 +37,56 @@ args=(
   -kernel "$kernel"
   -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext2 init=/usr/local/bin/wfx-kiosk-init loglevel=4"
   -drive "file=$image,if=virtio,format=raw"
-  -device virtio-gpu-pci
-  -device virtio-keyboard-pci
-  -device virtio-tablet-pci
+  -device "virtio-gpu-pci,xres=$width,yres=$height"
   -serial "$serial"
   -monitor "$monitor"
   -display "$display"
 )
+
+case "$network" in
+  user)
+    args+=(
+      -netdev user,id=wfxnet0
+      -device virtio-net-pci,netdev=wfxnet0
+    )
+    ;;
+  none)
+    args+=(-nic none)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_NETWORK=$network; expected user or none"
+    ;;
+esac
+
+case "$input" in
+  usb)
+    args+=(
+      -device qemu-xhci,id=xhci
+      -device usb-kbd,bus=xhci.0
+      -device usb-tablet,bus=xhci.0
+    )
+    ;;
+  virtio)
+    args+=(
+      -device virtio-keyboard-pci
+      -device virtio-tablet-pci
+    )
+    ;;
+  both)
+    args+=(
+      -device virtio-keyboard-pci
+      -device virtio-tablet-pci
+      -device qemu-xhci,id=xhci
+      -device usb-kbd,bus=xhci.0
+      -device usb-tablet,bus=xhci.0
+    )
+    ;;
+  none)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_INPUT=$input; expected usb, virtio, both, or none"
+    ;;
+esac
 
 if [ -f "$initramfs" ]; then
   args=(-initrd "$initramfs" "${args[@]}")

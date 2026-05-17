@@ -21,6 +21,12 @@ require_config() {
     fail "expected $key=$value in config.status"
 }
 
+require_config_empty() {
+  local key=$1
+  grep -Eq "^[[:space:]]*'$key': ''," "$config" ||
+    fail "expected $key to be empty in config.status"
+}
+
 reject_config_key() {
   local key=$1
   if grep -Eq "^[[:space:]]*'$key':" "$config"; then
@@ -46,13 +52,14 @@ reject_config_key MOZ_WEBRTC
 reject_config_key MOZ_ALSA
 reject_config_key MOZ_PULSEAUDIO
 reject_config_key MOZ_SYSTEM_PIPEWIRE
-reject_config_key MOZ_WATERFOX_BLOCKER
 reject_config_key MOZ_ENABLE_VAAPI
 reject_config_key MOZ_ENABLE_V4L2
 reject_config_key MOZ_SYNTH_SPEECHD
 reject_config_key MOZ_WEBMIDI_MIDIR_IMPL
 reject_config_key RELRHACK
 reject_config_key USE_ELF_HACK
+
+require_config_empty MOZ_WATERFOX_BLOCKER
 
 grep -Eq "^[[:space:]]*'CC_TYPE': CompilerType\\('clang'\\)," "$config" ||
   fail "target C compiler is not clang"

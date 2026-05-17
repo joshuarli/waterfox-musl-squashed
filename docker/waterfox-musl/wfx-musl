@@ -78,6 +78,7 @@ run_in_image() {
     --env WFX_SKIP_MACH_OPTIONAL=1 \
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
+    --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
     "$image" \
     "$@"
 }
@@ -104,6 +105,7 @@ run_shell() {
     --env WFX_SKIP_MACH_OPTIONAL=1 \
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
+    --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
     "$image" \
     bash
 }

@@ -39,24 +39,53 @@ rediscovering the same build, runtime, and QEMU issues.
 - Tranche 6: QEMU boots to seatd + custom cage/wlroots + Waterfox surfaces.
   Cocoa QEMU visibly renders Waterfox, repeat boots no longer hit profile
   read-only panics, and host terminal `Ctrl-C` terminates QEMU cleanly.
-  Keyboard and mouse input do not reach Waterfox yet.
-- After the WaterfoxBlocker build exclusion, rerun the stage 1 debug build and
-  package before treating QEMU logs as final.
+  Keyboard and mouse input now defaults to virtio keyboard/tablet devices with
+  USB HID available as a comparison mode. Mouse and keyboard input have been
+  manually verified in Cocoa. QEMU user networking is enabled by default and
+  serial boot verifies a DHCP lease. The remaining manual Cocoa check is
+  whether the URL bar text repaint issue is fixed after adding Mesa EGL/GLES
+  runtime libraries.
+- After the WaterfoxBlocker build exclusion, the stage 1 debug build and package
+  passed, and artifact scans found no blocker files or registration strings in
+  the staged root.
 
 Current important local edits in this squashed tree:
 
 - `docker/waterfox-musl/qemu-image`
   - creates an initramfs for virtio root mounting
   - installs BusyBox applet symlinks after `apk --no-scripts`
-  - includes `libgcc`, `libstdc++`, and `libintl` in the QEMU rootfs
+  - includes `libgcc`, `libstdc++`, `libintl`, GTK 3, and MIME/pixbuf data in
+    the QEMU rootfs
+  - includes Mesa EGL/GLES, Gallium software drivers, and `pciutils-libs` so
+    Waterfox glxtest no longer fails on missing EGL/libpci runtime libraries
   - mounts `/run` and `/tmp` as tmpfs in the guest init
   - keeps the Waterfox profile under `/run/wfx-profile` for repeatable boots
+  - loads input and virtio network modules, starts udev, triggers device
+    discovery, and acquires DHCP on the first non-loopback interface
   - disables Gecko subprocess sandboxes for the QEMU proof
+  - disables TRR/DoH and ORB JavaScript validation in the kiosk profile to keep
+    networking native and avoid the debug utility-process assertion
+  - disables chrome/content console-to-stdout prefs to keep debug-build
+    `console.debug` output off the serial log
   - leaves WaterfoxBlocker disabled in the QEMU kiosk profile as a runtime
     fallback
 - `docker/waterfox-musl/qemu-run`
   - defaults to plain serial stdio and no QEMU monitor
+  - defaults to virtio keyboard/tablet input; `WFX_QEMU_INPUT=usb` or `both`
+    are available for comparison
+  - defaults to QEMU user networking; `WFX_QEMU_NETWORK=none` disables it
+  - defaults the virtio GPU mode to 1600x1000 via `WFX_QEMU_WIDTH` and
+    `WFX_QEMU_HEIGHT`
   - traps host `INT`/`TERM` and terminates the QEMU process
+- `docker/waterfox-musl/wfx-musl`
+  - passes `WFX_FORCE_REBUILD` through to the Alpine container; use it when
+    changing cached source-built dependencies such as the custom cage/wlroots
+    compositor
+- `browser/locales/en-US/browser/waterfox.ftl`
+  - restores the `browser/waterfox.ftl` resource that Waterfox browser chrome
+    loads unconditionally; without it, typing in the URL bar hit
+    `selectedBrowser` / `UrlbarInput` exceptions after localization bundle
+    failures
 
 ## Cache And Artifact Layout
 
@@ -213,23 +242,38 @@ QEMU-specific issues already solved:
   `libintl.so.8`
 - Alpine `seatd` does not support the earlier `-s` socket option
 - guest profile data must not live on the root image; use `/run/wfx-profile`
+- QEMU defaults to user-mode networking and serial boot verifies DHCP lease
+  `10.0.2.15` from `10.0.2.2`
+- Cage debugoptimized builds used to force wlroots debug logs, which produced
+  repeated `Direct scan-out disabled by software cursor` output. The Cage patch
+  now defaults runtime wlroots logging to errors while preserving `-D` as the
+  explicit debug opt-in.
+- Waterfox glxtest no longer reports missing `libpci` or `libEGL` after adding
+  Mesa EGL/GLES, Gallium, and `pciutils-libs` to the QEMU rootfs.
+- The ORB JavaScript validator is disabled in the kiosk profile to avoid a
+  debug-only JSOracle utility-process assertion in this musl runtime.
 - Stage 1 passes `--disable-waterfox-blocker`; the blocker component should not
   be built or registered for the musl debug build. The QEMU kiosk profile also
   keeps blocker prefs disabled as a runtime fallback.
 
 Current noisy but nonfatal QEMU output:
 
-- missing Waterfox fluent strings
-- `glxtest` reports missing `libpci`/`libEGL`, expected for software rendering
-- wlroots logs `Failed to get DMA-BUF from buffer` / failed scan-out imports
-  with the pixman and DRM-dumb renderer path
+- repeated Gecko debug-build `PuppetWidget without Tab` warnings
+- Waterfox bundled sidebar extension JavaScript errors around
+  `handle-autoplay-blocking.js`
+- occasional wlroots DRM `Atomic commit failed: Resource busy` errors during
+  active repaint
 
 Current QEMU functional followup:
 
-- Cocoa renders Waterfox, but keyboard and mouse input do not reach the browser.
-  Start by checking whether the guest sees QEMU input devices under
-  `/dev/input`, whether the needed virtio input modules are present, and whether
-  wlroots/libinput logs device discovery.
+- Virtio keyboard/tablet now creates `/dev/input/event0` and `event1` in the
+  guest. The missing manual input was caused by starting only the wlroots DRM
+  backend. With `WLR_BACKENDS=drm,libinput`, serial boot verifies wlroots opens
+  both event devices and adds the QEMU Virtio Keyboard and QEMU Virtio Tablet.
+- Mouse input works in the Cocoa window.
+- Keyboard input works in the Cocoa window. The later issue was that typed URL
+  bar text did not render back even though Enter submitted the URL; Mesa
+  runtime libraries have since been added, so manually recheck this in Cocoa.
 
 If the Cocoa window is blank, investigate the wlroots pixman/DRM-dumb scan-out
 path first. The serial log can still show successful surface creation even if
@@ -278,6 +322,10 @@ For QEMU command debugging, environment knobs are:
 - `WFX_QEMU_ACCEL`, default `hvf`
 - `WFX_QEMU_MEMORY`, default `4096`
 - `WFX_QEMU_SMP`, default `4`
+- `WFX_QEMU_INPUT`, default `virtio`; accepted values are `virtio`, `usb`,
+  `both`, and `none`
+- `WFX_QEMU_WIDTH`, default `1600`
+- `WFX_QEMU_HEIGHT`, default `1000`
 - `WFX_QEMU_SERIAL`, default `stdio`
 - `WFX_QEMU_MONITOR`, default `none`
 - `WFX_QEMU_IMAGE`, `WFX_QEMU_KERNEL`, `WFX_QEMU_INITRAMFS`
