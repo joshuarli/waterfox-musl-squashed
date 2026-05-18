@@ -29,7 +29,7 @@ UNIFIED_SOURCES += [
     "HeadlessWidget.cpp",
 ]
 
-if widget_dir == "gtk":
+if widget_dir in ("gtk", "minwayland"):
     UNIFIED_SOURCES += [
         "HeadlessLookAndFeelGTK.cpp",
     ]

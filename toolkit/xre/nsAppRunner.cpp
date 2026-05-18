@@ -353,7 +353,7 @@ MOZ_CONSTINIT nsString gProcessStartupShortcut;
 #  endif /* MOZ_X11 */
 #endif
 
-#if defined(MOZ_WAYLAND)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 MOZ_RUNINIT std::unique_ptr<WaylandProxy> gWaylandProxy;
 #endif
 
@@ -442,6 +442,7 @@ bool IsWaylandEnabled() {
       // No X11 display, so try to run wayland.
       return true;
     }
+#  if defined(MOZ_WIDGET_GTK)
     // MOZ_ENABLE_WAYLAND is our primary Wayland on/off switch.
     if (const char* waylandPref = PR_GetEnv("MOZ_ENABLE_WAYLAND")) {
       return *waylandPref == '1';
@@ -461,6 +462,9 @@ bool IsWaylandEnabled() {
     // default we're ok, since either the distro has enabled Wayland by default,
     // or the user has gone out of their way to use Wayland.
     return !gtk_check_version(3, 24, 30);
+#  else
+    return true;
+#  endif
   }();
   return isWaylandEnabled;
 }
@@ -5388,7 +5392,7 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
 #ifdef USE_GLX_TEST
     GfxInfo::FireGLXTestProcess();
 #endif
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     // Make sure we have wayland connection for main thread.
     // It's used as template to create display connections
     // for different threads.

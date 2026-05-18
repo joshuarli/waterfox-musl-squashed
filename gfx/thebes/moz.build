@@ -122,11 +122,18 @@ elif CONFIG["MOZ_WIDGET_TOOLKIT"] in ("cocoa", "uikit"):
         SOURCES += [
             "PrintTargetCG.mm",
         ]
-elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+elif CONFIG["MOZ_WIDGET_TOOLKIT"] in ("gtk", "minwayland"):
     EXPORTS += [
         "gfxFT2FontBase.h",
-        "gfxPlatformGtk.h",
     ]
+    if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+        EXPORTS += [
+            "gfxPlatformGtk.h",
+        ]
+    else:
+        EXPORTS += [
+            "gfxPlatformMinWayland.h",
+        ]
     EXPORTS.mozilla.gfx += [
         "PrintTargetPDF.h",
     ]
@@ -134,9 +141,16 @@ elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
         "gfxFcPlatformFontList.cpp",
         "gfxFT2FontBase.cpp",
         "gfxFT2Utils.cpp",
-        "gfxPlatformGtk.cpp",
         "PrintTargetPDF.cpp",
     ]
+    if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+        SOURCES += [
+            "gfxPlatformGtk.cpp",
+        ]
+    else:
+        SOURCES += [
+            "gfxPlatformMinWayland.cpp",
+        ]
 
     if CONFIG["MOZ_X11"]:
         EXPORTS += [
@@ -282,10 +296,10 @@ LOCAL_INCLUDES += [
     "/widget/gtk",
 ]
 
-if CONFIG["MOZ_WIDGET_TOOLKIT"] in ("android", "gtk"):
+if CONFIG["MOZ_WIDGET_TOOLKIT"] in ("android", "gtk", "minwayland"):
     DEFINES["MOZ_ENABLE_FREETYPE"] = True
 
-if CONFIG["MOZ_WIDGET_TOOLKIT"] in ("android"):
+if CONFIG["MOZ_WIDGET_TOOLKIT"] in ("android", "minwayland"):
     CXXFLAGS += CONFIG["CAIRO_FT_CFLAGS"]
 
 if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":

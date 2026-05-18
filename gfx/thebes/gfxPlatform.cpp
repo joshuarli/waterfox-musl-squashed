@@ -84,6 +84,8 @@
 #  include "gfxQuartzSurface.h"
 #elif defined(MOZ_WIDGET_GTK)
 #  include "gfxPlatformGtk.h"
+#elif defined(MOZ_WIDGET_MINWAYLAND)
+#  include "gfxPlatformMinWayland.h"
 #elif defined(ANDROID)
 #  include "gfxAndroidPlatform.h"
 #endif
@@ -793,6 +795,9 @@ bool gfxPlatform::HasVariationFontSupport() {
     sHasVariationFontSupport = gfxPlatformMac::CheckVariationFontSupport();
 #elif defined(MOZ_WIDGET_GTK)
     sHasVariationFontSupport = gfxPlatformGtk::CheckVariationFontSupport();
+#elif defined(MOZ_WIDGET_MINWAYLAND)
+    sHasVariationFontSupport =
+        gfxPlatformMinWayland::CheckVariationFontSupport();
 #elif defined(ANDROID)
     sHasVariationFontSupport = gfxAndroidPlatform::CheckVariationFontSupport();
 #else
@@ -914,6 +919,8 @@ void gfxPlatform::Init() {
   gPlatform = new gfxPlatformMac;
 #elif defined(MOZ_WIDGET_GTK)
   gPlatform = new gfxPlatformGtk;
+#elif defined(MOZ_WIDGET_MINWAYLAND)
+  gPlatform = new gfxPlatformMinWayland;
 #elif defined(ANDROID)
   gPlatform = new gfxAndroidPlatform;
 #else

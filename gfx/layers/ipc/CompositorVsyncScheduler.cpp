@@ -173,7 +173,7 @@ void CompositorVsyncScheduler::NotifyVsync(const VsyncEvent& aVsync) {
   // Called from the vsync dispatch thread. When in the GPU Process, that's
   // the same as the compositor thread.
 #ifdef DEBUG
-#  ifdef MOZ_WAYLAND
+#  if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   // On Wayland, we dispatch vsync from the main thread, without a GPU process.
   // To allow this, we skip the following asserts if we're currently utilizing
   // the Wayland backend. The IsParentProcess guard is needed to ensure that
@@ -181,7 +181,7 @@ void CompositorVsyncScheduler::NotifyVsync(const VsyncEvent& aVsync) {
   // process on X11.
   if (!XRE_IsParentProcess() ||
       !gfxPlatformGtk::GetPlatform()->IsWaylandDisplay())
-#  endif  // MOZ_WAYLAND
+#  endif  // MOZ_WIDGET_GTK && MOZ_WAYLAND
   {
     MOZ_ASSERT_IF(XRE_IsParentProcess(),
                   !CompositorThreadHolder::IsInCompositorThread());

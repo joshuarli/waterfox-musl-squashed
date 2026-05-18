@@ -117,9 +117,9 @@ static StaticRefPtr<Theme> gRDMInstance;
 
 }  // namespace
 
-#ifdef ANDROID
+#if defined(ANDROID) || defined(MOZ_WIDGET_MINWAYLAND)
 already_AddRefed<Theme> do_CreateNativeThemeDoNotUseDirectly() {
-  // Android doesn't have a native theme.
+  // Android and minwayland don't have native theme backends.
   return do_AddRef(new Theme(Theme::ScrollbarStyle()));
 }
 #endif
@@ -1517,7 +1517,7 @@ UniquePtr<ScrollbarDrawing> Theme::ScrollbarStyle() {
   return MakeUnique<ScrollbarDrawingWin>();
 #elif defined(MOZ_WIDGET_COCOA) || defined(MOZ_WIDGET_UIKIT)
   return MakeUnique<ScrollbarDrawingCocoa>();
-#elif MOZ_WIDGET_GTK
+#elif defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_MINWAYLAND)
   return MakeUnique<ScrollbarDrawingGTK>();
 #elif ANDROID
   return MakeUnique<ScrollbarDrawingAndroid>();

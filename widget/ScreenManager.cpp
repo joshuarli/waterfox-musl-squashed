@@ -11,9 +11,9 @@
 #include "mozilla/dom/DOMTypes.h"
 #include "mozilla/Logging.h"
 #include "mozilla/StaticPtr.h"
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
 #  include "mozilla/WidgetUtilsGtk.h"
-#endif /* MOZ_WAYLAND */
+#endif /* MOZ_WIDGET_GTK */
 
 static mozilla::LazyLogModule sScreenLog("WidgetScreen");
 
@@ -125,7 +125,7 @@ ScreenManager::ScreenForRect(int32_t aX, int32_t aY, int32_t aWidth,
 
 already_AddRefed<Screen> ScreenManager::ScreenForRect(
     const DesktopIntRect& aRect) {
-#if defined(MOZ_WAYLAND) && defined(MOZ_LOGGING)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_LOGGING)
   static bool inWayland = GdkIsWaylandDisplay();
   if (inWayland) {
     MOZ_LOG(sScreenLog, LogLevel::Warning,

@@ -13,11 +13,11 @@
 namespace mozilla {
 namespace widget {
 
-#if defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_MINWAYLAND)
 
 // Our nsLookAndFeel for Gtk relies on APIs that aren't available in headless
-// mode, so for processes that are unable to connect to a display server, we use
-// an implementation with hardcoded values.
+// mode, and the minimal Wayland backend intentionally avoids desktop theme
+// probing, so use an implementation with hardcoded values.
 //
 // HeadlessLookAndFeel is used:
 //

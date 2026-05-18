@@ -55,6 +55,24 @@ Important GTK files to study first:
 - widget/gtk/nsLookAndFeel.cpp: GTK theme/settings source
 - widget/gtk/ScreenHelperGTK.cpp: monitor/screen metrics
 
+## Current Progress
+
+The first build scaffold tranche is in place:
+
+- `--enable-default-toolkit=cairo-minwayland` configures
+  `MOZ_WIDGET_TOOLKIT=minwayland`, `MOZ_WIDGET_MINWAYLAND=1`, and `MOZ_WAYLAND=1`.
+- `docker/waterfox-musl/mozconfig.minwayland` plus `configure-minwayland` and
+  `build-minwayland` build an arm64 musl debug objdir at
+  `.wfx-cache/obj-aarch64-alpine-linux-musl-minwayland`.
+- `widget/minwayland` provides a minimal component set and uses headless-backed
+  widgets while real Wayland windows, input, clipboard, and popups are brought
+  up incrementally.
+- The minwayland configure path depends on raw Wayland, xkbcommon,
+  fontconfig, and freetype rather than GTK/GDK/GLib/GIO/Pango.
+
+The runtime proof below is still open. The next tranche should replace the
+temporary headless widget with a real Wayland toplevel and event dispatch.
+
 ## Proposed Backend Shape
 
 Create a new backend, tentatively:

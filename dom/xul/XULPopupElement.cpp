@@ -23,7 +23,7 @@
 #include "mozilla/dom/XULButtonElement.h"
 #include "mozilla/dom/XULMenuElement.h"
 #include "mozilla/dom/XULPopupElementBinding.h"
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
 #  include "mozilla/WidgetUtilsGtk.h"
 #endif
 
@@ -329,7 +329,7 @@ void XULPopupElement::SetConstraintRect(dom::DOMRectReadOnly& aRect) {
 }
 
 bool XULPopupElement::IsWaylandDragSource() const {
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
   nsMenuPopupFrame* f = do_QueryFrame(GetPrimaryFrame());
   return f && f->IsDragSource();
 #else
@@ -338,7 +338,7 @@ bool XULPopupElement::IsWaylandDragSource() const {
 }
 
 bool XULPopupElement::IsWaylandPopup() const {
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
   return widget::GdkIsWaylandDisplay() || widget::IsXWaylandProtocol();
 #else
   return false;

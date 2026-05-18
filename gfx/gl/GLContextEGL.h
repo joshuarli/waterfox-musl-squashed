@@ -156,7 +156,7 @@ class GLContextEGL final : public GLContext {
       EglDisplay&, EGLConfig, EGLenum bindToTextureFormat,
       gfx::IntSize& pbsize);
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   static EGLSurface CreateWaylandOffscreenSurface(EglDisplay&, EGLConfig,
                                                   gfx::IntSize& pbsize);
 #endif

@@ -72,7 +72,7 @@ using mozilla::dom::XULButtonElement;
 
 TimeStamp nsMenuPopupFrame::sLastKeyTime;
 
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
 #  include "mozilla/WidgetUtilsGtk.h"
 #  define IS_WAYLAND_DISPLAY() mozilla::widget::GdkIsWaylandDisplay()
 extern mozilla::LazyLogModule gWidgetPopupLog;

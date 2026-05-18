@@ -59,7 +59,10 @@ elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "windows":
     UNIFIED_SOURCES += ["windows/WindowsGamepad.cpp"]
 elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":
     UNIFIED_SOURCES += ["android/AndroidGamepad.cpp"]
-elif CONFIG["OS_ARCH"] in ("Linux", "FreeBSD", "DragonFly"):
+elif (
+    CONFIG["OS_ARCH"] in ("Linux", "FreeBSD", "DragonFly")
+    and CONFIG["MOZ_WIDGET_TOOLKIT"] != "minwayland"
+):
     UNIFIED_SOURCES += ["linux/LinuxGamepad.cpp"]
 else:
     UNIFIED_SOURCES += ["fallback/FallbackGamepad.cpp"]
@@ -75,5 +78,6 @@ LOCAL_INCLUDES += [
     "/dom/base",
 ]
 
-CFLAGS += CONFIG["GLIB_CFLAGS"]
-CXXFLAGS += CONFIG["GLIB_CFLAGS"]
+if CONFIG["MOZ_WIDGET_TOOLKIT"] != "minwayland":
+    CFLAGS += CONFIG["GLIB_CFLAGS"]
+    CXXFLAGS += CONFIG["GLIB_CFLAGS"]

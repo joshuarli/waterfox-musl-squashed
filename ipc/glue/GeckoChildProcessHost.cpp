@@ -340,6 +340,8 @@ class LinuxProcessLauncher : public PosixProcessLauncher {
   virtual Result<Ok, LaunchError> DoSetup() override;
 };
 typedef LinuxProcessLauncher ProcessLauncher;
+#  elif defined(MOZ_WIDGET_MINWAYLAND)
+typedef PosixProcessLauncher ProcessLauncher;
 #  elif defined(MOZ_WIDGET_UIKIT)
 class IosProcessLauncher : public PosixProcessLauncher {
  public:

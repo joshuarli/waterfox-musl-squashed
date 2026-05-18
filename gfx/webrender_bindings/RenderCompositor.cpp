@@ -27,7 +27,7 @@
 #  include "mozilla/webrender/RenderCompositorEGL.h"
 #endif
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 #  include "mozilla/webrender/RenderCompositorNative.h"
 #endif
 
@@ -207,7 +207,7 @@ UniquePtr<RenderCompositor> RenderCompositor::Create(
     if (!gfxPlatform::IsHeadless()) {
       return RenderCompositorNativeSWGL::Create(aWidget, aError);
     }
-#elif defined(MOZ_WAYLAND)
+#elif defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     // Some widgets on Wayland (D&D popups for instance) can't use native
     // compositor due to system limitations.
     if (gfx::gfxVars::UseWebRenderCompositor() &&
@@ -236,7 +236,7 @@ UniquePtr<RenderCompositor> RenderCompositor::Create(
   }
 #endif
 
-#if defined(MOZ_WAYLAND)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   if (gfx::gfxVars::UseWebRenderCompositor() &&
       aWidget->GetCompositorOptions().AllowNativeCompositor()) {
     return RenderCompositorNativeOGL::Create(aWidget, aError);

@@ -38,7 +38,8 @@
 
 #include "nsRegionFwd.h"
 
-#if defined(MOZ_WIDGET_ANDROID) || defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_WIDGET_ANDROID) || defined(MOZ_WIDGET_GTK) || \
+    defined(MOZ_WIDGET_MINWAYLAND)
 #  ifndef MOZ_ENABLE_FREETYPE
 #    define MOZ_ENABLE_FREETYPE
 #  endif
@@ -2198,7 +2199,7 @@ class GFX2D_API Factory {
       bool aHasColorGlyphs = false);
 #endif
 
-#ifdef MOZ_WIDGET_GTK
+#if defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_MINWAYLAND)
   static already_AddRefed<ScaledFont> CreateScaledFontForFontconfigFont(
       const RefPtr<UnscaledFont>& aUnscaledFont, Float aSize,
       RefPtr<SharedFTFace> aFace, FcPattern* aPattern);

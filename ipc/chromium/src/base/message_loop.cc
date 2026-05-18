@@ -281,7 +281,11 @@ MessageLoop::MessageLoop(Type type, nsISerialEventTarget* aEventTarget)
     pump_ = base::MessagePumpMac::Create();
 #  elif defined(XP_LINUX) || defined(__DragonFly__) || defined(XP_FREEBSD) || \
       defined(XP_NETBSD) || defined(XP_OPENBSD)
+#    if defined(MOZ_WIDGET_GTK)
     pump_ = new base::MessagePumpForUI();
+#    else
+    pump_ = new base::MessagePumpDefault();
+#    endif
 #  endif  // XP_LINUX
   } else if (type_ == TYPE_IO) {
     pump_ = new base::MessagePumpLibevent();

@@ -94,7 +94,7 @@ namespace gl {
 
 using namespace mozilla::widget;
 
-#if defined(MOZ_WAYLAND)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 class WaylandOffscreenGLSurface {
  public:
   WaylandOffscreenGLSurface(struct wl_surface* aWaylandSurface,
@@ -347,7 +347,7 @@ EGLSurface GLContextEGL::CreateEGLSurfaceForCompositorWidget(
     // hidden, just create a fallback EGLSurface. Actual EGLSurface will be
     // created by widget code later when aCompositorWidget becomes visible.
     mozilla::gfx::IntSize pbSize(16, 16);
-#  ifdef MOZ_WAYLAND
+#  if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     if (GdkIsWaylandDisplay()) {
       return CreateWaylandOffscreenSurface(*egl, aConfig, pbSize);
     } else
@@ -820,7 +820,7 @@ TRY_AGAIN_POWER_OF_TWO:
   return surface;
 }
 
-#if defined(MOZ_WAYLAND)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 WaylandOffscreenGLSurface::WaylandOffscreenGLSurface(
     struct wl_surface* aWaylandSurface, struct wl_egl_window* aEGLWindow)
     : mWaylandSurface(aWaylandSurface), mEGLWindow(aEGLWindow) {}
@@ -1025,7 +1025,7 @@ EGLSurface GLContextEGL::CreateCompatibleSurface(void* aWindow) const {
 
 static void FillContextAttribs(bool es3, bool useGles, nsTArray<EGLint>* out) {
   out->AppendElement(LOCAL_EGL_SURFACE_TYPE);
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   if (GdkIsWaylandDisplay()) {
     // Wayland on desktop does not support PBuffer or FBO.
     // We create a dummy wl_egl_window instead.
@@ -1174,7 +1174,7 @@ RefPtr<GLContextEGL> GLContextEGL::CreateWithoutSurface(
 
     auto dummySize = mozilla::gfx::IntSize{16, 16};
     EGLSurface surface = nullptr;
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     if (GdkIsWaylandDisplay()) {
       surface = GLContextEGL::CreateWaylandOffscreenSurface(*egl, surfaceConfig,
                                                             dummySize);
@@ -1198,7 +1198,7 @@ RefPtr<GLContextEGL> GLContextEGL::CreateWithoutSurface(
     if (!gl) {
       NS_WARNING("Failed to create GLContext from PBuffer");
       egl->fDestroySurface(surface);
-#if defined(MOZ_WAYLAND)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
       DeleteWaylandOffscreenGLSurface(surface);
 #endif
       return nullptr;
@@ -1233,7 +1233,7 @@ void GLContextEGL::DestroySurface(EglDisplay& aEgl, const EGLSurface aSurface) {
       const EGLint err = aEgl.mLib->fGetError();
       gfxCriticalNote << "Error in eglDestroySurface: " << gfx::hexa(err);
     }
-#if defined(MOZ_WAYLAND)
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     DeleteWaylandOffscreenGLSurface(aSurface);
 #endif
   }

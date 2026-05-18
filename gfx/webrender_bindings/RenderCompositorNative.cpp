@@ -33,7 +33,7 @@ RenderCompositorNative::RenderCompositorNative(
       mNativeLayerRoot(GetWidget()->GetNativeLayerRoot()) {
   LOG("RenderCompositorNative::RenderCompositorNative()");
 
-#if defined(XP_DARWIN) || defined(MOZ_WAYLAND)
+#if defined(XP_DARWIN) || (defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND))
   auto pool = RenderThread::Get()->SharedSurfacePool();
   if (pool) {
     mSurfacePoolHandle = pool->GetHandleForGL(aGL);
@@ -109,7 +109,7 @@ inline layers::WebRenderCompositor RenderCompositorNative::CompositorType()
   if (gfx::gfxVars::UseWebRenderCompositor()) {
 #if defined(XP_DARWIN)
     return layers::WebRenderCompositor::CORE_ANIMATION;
-#elif defined(MOZ_WAYLAND)
+#elif defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     return layers::WebRenderCompositor::WAYLAND;
 #endif
   }

@@ -553,7 +553,7 @@ if CONFIG['MOZ_WIDGET_TOOLKIT'] in ('cocoa', 'uikit'):
     SOURCES += [
         'skia/src/ports/SkTypeface_mac_ct.cpp',
     ]
-if CONFIG['MOZ_WIDGET_TOOLKIT'] == 'gtk':
+if CONFIG['MOZ_WIDGET_TOOLKIT'] in ('gtk', 'minwayland'):
     UNIFIED_SOURCES += [
         'skia/src/ports/SkDebug_stdio.cpp',
         'skia/src/ports/SkOSFile_posix.cpp',
@@ -638,7 +638,7 @@ if CONFIG['CC_TYPE'] in ('clang', 'clang-cl'):
         '-Wno-unused-private-field',
     ]
 
-if CONFIG['MOZ_WIDGET_TOOLKIT'] in ('gtk', 'android'):
+if CONFIG['MOZ_WIDGET_TOOLKIT'] in ('gtk', 'android', 'minwayland'):
     LOCAL_INCLUDES += [
         "/gfx/cairo/cairo/src",
     ]

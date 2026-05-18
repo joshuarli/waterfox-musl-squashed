@@ -51,7 +51,7 @@
 #  include <gtk/gtkx.h>
 #  include "gfxPlatformGtk.h"
 #endif
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 #  include "mozilla/widget/nsWaylandDisplay.h"
 #endif
 

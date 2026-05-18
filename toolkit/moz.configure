@@ -590,6 +590,7 @@ def toolkit_choices(target):
             "cairo-gtk3-x11-wayland",
             "cairo-gtk3-wayland-only",
             "cairo-gtk3-x11-only",
+            "cairo-minwayland",
         )
 
 
@@ -639,6 +640,11 @@ def toolkit_gtk(toolkit):
     return toolkit == "gtk"
 
 
+@depends(toolkit)
+def toolkit_minwayland(toolkit):
+    return toolkit == "minwayland"
+
+
 @depends(toolkit_gtk, full_toolkit)
 def toolkit_gtk_x11(toolkit_gtk, full_toolkit):
     return toolkit_gtk and full_toolkit != "cairo-gtk3-wayland-only"
@@ -659,19 +665,40 @@ def toolkit_gtk_wayland_optional(full_toolkit):
     return full_toolkit == "cairo-gtk3"
 
 
+@depends(toolkit_gtk_wayland, toolkit_minwayland)
+def toolkit_wayland(toolkit_gtk_wayland, toolkit_minwayland):
+    return toolkit_gtk_wayland or toolkit_minwayland
+
+
+@depends(toolkit_gtk_wayland, toolkit_minwayland)
+def wayland_packages(toolkit_gtk_wayland, toolkit_minwayland):
+    if toolkit_gtk_wayland:
+        return "gtk+-wayland-3.0 >= 3.14 xkbcommon >= 0.4.1"
+    if toolkit_minwayland:
+        return "wayland-client >= 1.20 wayland-cursor xkbcommon >= 0.4.1"
+
+
 # Wayland support
 # ==============================================================
 wayland_headers = pkg_check_modules(
     "MOZ_WAYLAND",
-    "gtk+-wayland-3.0 >= 3.14 xkbcommon >= 0.4.1",
+    wayland_packages,
     allow_missing=toolkit_gtk_wayland_optional,
-    when=toolkit_gtk_wayland,
+    when=toolkit_wayland,
 )
 
 
-@depends(wayland_headers, toolkit_gtk, artifact_builds, toolkit_gtk_wayland)
-def wayland_headers(wayland, toolkit_gtk, artifacts, toolkit_gtk_wayland):
-    if not toolkit_gtk_wayland:
+@depends(
+    wayland_headers,
+    toolkit_gtk,
+    artifact_builds,
+    toolkit_gtk_wayland,
+    toolkit_minwayland,
+)
+def wayland_headers(
+    wayland, toolkit_gtk, artifacts, toolkit_gtk_wayland, toolkit_minwayland
+):
+    if not toolkit_gtk_wayland and not toolkit_minwayland:
         return False
     if toolkit_gtk and artifacts:
         return True
@@ -810,7 +837,7 @@ set_define(gl_provider_define, True)
 # ==============================================================
 @depends(toolkit)
 def pdf_printing(toolkit):
-    if toolkit in ("windows", "gtk", "android"):
+    if toolkit in ("windows", "gtk", "android", "minwayland"):
         return True
 
 
@@ -824,7 +851,7 @@ option(env="USE_FC_FREETYPE", help="Force-enable the use of fontconfig freetype"
 
 @depends("USE_FC_FREETYPE", toolkit)
 def fc_freetype(value, toolkit):
-    if value or (toolkit == "gtk" and value.origin == "default"):
+    if value or (toolkit in ("gtk", "minwayland") and value.origin == "default"):
         return True
 
 

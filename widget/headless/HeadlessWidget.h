@@ -13,7 +13,7 @@
 
 // The various synthesized event values are hardcoded to avoid pulling
 // in the platform specific widget code.
-#if defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_MINWAYLAND)
 #  define MOZ_HEADLESS_SCROLL_MULTIPLIER 3
 #  define MOZ_HEADLESS_SCROLL_DELTA_MODE \
     mozilla::dom::WheelEvent_Binding::DOM_DELTA_LINE

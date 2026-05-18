@@ -42,7 +42,7 @@
 #    include "WidgetUtilsGtk.h"
 #  endif
 
-#  ifdef MOZ_WAYLAND
+#  if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 #    include "wayland-proxy.h"
 #  endif
 
@@ -180,7 +180,7 @@ static bool IsCrashyGtkMessage(const nsACString& aMessage) {
 static void HandleGLibMessage(GLogLevelFlags aLogLevel,
                               const nsDependentCString& aMessage) {
   if (MOZ_UNLIKELY(IsCrashyGtkMessage(aMessage))) {
-#    ifdef MOZ_WAYLAND
+#    if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
     MOZ_CRASH_UNSAFE_PRINTF(
         "(%s) %s Proxy: %s",
         mozilla::widget::GetDesktopEnvironmentIdentifier().get(),

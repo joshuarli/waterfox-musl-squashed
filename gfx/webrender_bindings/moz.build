@@ -97,7 +97,7 @@ if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
         "RenderDMABUFTextureHost.cpp",
     ]
 
-if CONFIG["MOZ_WAYLAND"]:
+if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk" and CONFIG["MOZ_WAYLAND"]:
     EXPORTS.mozilla.webrender += [
         "RenderCompositorNative.h",
     ]
@@ -105,7 +105,7 @@ if CONFIG["MOZ_WAYLAND"]:
         "RenderCompositorNative.cpp",
     ]
 
-if CONFIG["MOZ_WIDGET_TOOLKIT"] in ("android", "gtk"):
+if CONFIG["MOZ_WIDGET_TOOLKIT"] in ("android", "gtk", "minwayland"):
     CXXFLAGS += CONFIG["CAIRO_FT_CFLAGS"]
 
 if CONFIG["COMPILE_ENVIRONMENT"]:

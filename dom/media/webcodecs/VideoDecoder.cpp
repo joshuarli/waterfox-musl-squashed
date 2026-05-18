@@ -31,7 +31,7 @@
 
 #ifdef XP_MACOSX
 #  include "MacIOSurfaceImage.h"
-#elif MOZ_WAYLAND
+#elif defined(MOZ_WIDGET_GTK)
 #  include "mozilla/layers/DMABUFSurfaceImage.h"
 #  include "mozilla/widget/DMABufSurface.h"
 #endif
@@ -317,7 +317,7 @@ static Maybe<VideoPixelFormat> GuessPixelFormat(layers::Image* aImage) {
       return SurfaceFormatToVideoPixelFormat(image->GetSurface()->GetFormat());
     }
 #endif
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
     if (layers::DMABUFSurfaceImage* image = aImage->AsDMABUFSurfaceImage()) {
       MOZ_ASSERT(image->GetSurface());
       return SurfaceFormatToVideoPixelFormat(image->GetSurface()->GetFormat());
@@ -432,7 +432,7 @@ static VideoColorSpaceInternal GuessColorSpace(const MacIOSurface* aSurface) {
   return colorSpace;
 }
 #endif
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
 // TODO: Set DMABufSurface::IsFullRange() to const so aSurface can be const.
 static VideoColorSpaceInternal GuessColorSpace(DMABufSurface* aSurface) {
   if (!aSurface) {
@@ -495,7 +495,7 @@ static VideoColorSpaceInternal GuessColorSpace(layers::Image* aImage) {
       return GuessColorSpace(image->GetSurface());
     }
 #endif
-#ifdef MOZ_WAYLAND
+#ifdef MOZ_WIDGET_GTK
     // TODO: Make sure VideoFrame can interpret its internal data in different
     // formats.
     if (layers::DMABUFSurfaceImage* image = aImage->AsDMABUFSurfaceImage()) {
