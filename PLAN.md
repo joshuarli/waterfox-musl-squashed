@@ -307,10 +307,24 @@ Tranche 6 status:
   forces Software WebRender by default; use
   `WFX_QEMU_GUEST_SOFTWARE_WEBRENDER=1` to compare against the SWGL path.
 - `docker/waterfox-musl/qemu-repro-hamburger` is now the automated repro for
-  the popup rendering bug. It boots QEMU, clicks the toolbar hamburger through
-  QMP, saves full-frame screenshots plus a rightmost 64px strip, and records
-  black-screen detection stats in `repro.txt`. By default it exits nonzero on
-  effectively black frames so failed display paths are easy to back out of.
+  the popup/text rendering bug. It boots QEMU, clicks through QMP, optionally
+  right-clicks with `WFX_REPRO_BUTTON=right`, optionally types with
+  `WFX_REPRO_TEXT`, saves full-frame screenshots plus a rightmost 64px strip,
+  and records black-screen detection stats in `repro.txt`. By default it exits
+  nonzero on effectively black frames so failed display paths are easy to back
+  out of.
+- The QEMU image also packages `wfx-gtk-popup-repro`, a small GTK/Wayland menu
+  app built from `docker/waterfox-musl/gtk-popup-repro.c`. Run it with
+  `WFX_QEMU_GUEST_BROWSER=gtk-popup-repro
+  docker/waterfox-musl/qemu-repro-hamburger`. This minimal control renders its
+  GTK popup correctly under `hvf + virtio + cage`, which ruled out the generic
+  QEMU/wlroots/GTK popup path.
+- The popup and URL-bar text failures were traced to zero-sized chrome fonts.
+  `nsMenuPopupFrame` saw valid localized labels, but computed font size was
+  zero; forcing `userChrome.css` font-size fixed the menus. The source fix is
+  in `widget/gtk/nsLookAndFeel.cpp`: clamp invalid GTK text scale back to
+  `1.0f` and fall back when GTK/Pango reports a missing font family or
+  non-positive font size.
 - With GL WebRender, the SWGL critical error is gone but the UI issue remains,
   and Firefox can warn about pending Wayland buffers in
   `WindowSurfaceWaylandMultiBuffer`. The proof image now forces full scene

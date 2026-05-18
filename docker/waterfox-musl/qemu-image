@@ -2,6 +2,7 @@
 set -euo pipefail
 
 cache=${WFX_CACHE:-/cache}
+repo_root=${WFX_REPO_ROOT:-/work}
 stage=${WFX_STAGE_ROOT:-$cache/dist/stage1-root}
 qemu_dir=$cache/qemu
 rootfs=$qemu_dir/rootfs
@@ -12,7 +13,7 @@ compositor=${WFX_KIOSK_COMPOSITOR:-/opt/wfx/kiosk-compositor}
 image_mb=${WFX_QEMU_IMAGE_MB:-2048}
 include_alpine_firefox=${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}
 include_weston=${WFX_QEMU_INCLUDE_WESTON:-0}
-qemu_image_version=5
+qemu_image_version=10
 
 fail() {
   printf 'wfx qemu image failed: %s\n' "$*" >&2
@@ -95,12 +96,17 @@ install_payloads() {
   require_path "$compositor/bin/cage"
 
   mkdir -p "$rootfs/opt" "$rootfs/usr/bin"
-  rm -rf "$rootfs/opt/waterfox" "$rootfs/opt/wfx" "$rootfs/usr/bin/waterfox"
+  rm -rf "$rootfs/opt/waterfox" "$rootfs/opt/wfx" "$rootfs/usr/bin/waterfox" "$rootfs/usr/bin/wfx-gtk-popup-repro"
   cp -a "$stage/opt/waterfox" "$rootfs/opt/waterfox"
   mkdir -p "$rootfs/opt/wfx"
   cp -a "$stage/opt/wfx/sysroot" "$rootfs/opt/wfx/sysroot"
   cp -a "$compositor" "$rootfs/opt/wfx/kiosk-compositor"
   cp -a "$stage/usr/bin/waterfox" "$rootfs/usr/bin/waterfox"
+  clang-22 \
+    $(pkg-config --cflags gtk+-3.0) \
+    "$repo_root/docker/waterfox-musl/gtk-popup-repro.c" \
+    -o "$rootfs/usr/bin/wfx-gtk-popup-repro" \
+    $(pkg-config --libs gtk+-3.0)
 }
 
 install_kiosk_init() {
@@ -172,21 +178,31 @@ export WLR_SCENE_DEBUG_DAMAGE=rerender
 export WLR_SCENE_DISABLE_DIRECT_SCANOUT=1
 export WLR_SCENE_DISABLE_VISIBILITY=1
 export SEATD_SOCK=/run/seatd.sock
+profile=/run/wfx-profile
 browser=/usr/bin/waterfox
 browser_ld_library_path=$LD_LIBRARY_PATH
+browser_args="-no-remote -profile $profile about:blank"
 compositor=cage
 software_webrender=0
 full_damage=1
 pref_profile=default
+moz_log=
 for arg in $(cat /proc/cmdline); do
   case "$arg" in
+    wfx.browser=gtk-popup-repro)
+      browser=/usr/bin/wfx-gtk-popup-repro
+      browser_ld_library_path=/opt/wfx/kiosk-compositor/lib
+      browser_args=
+      ;;
     wfx.browser=firefox)
       browser=/usr/bin/firefox
       browser_ld_library_path=/opt/wfx/kiosk-compositor/lib
+      browser_args="-no-remote -profile $profile about:blank"
       ;;
     wfx.browser=waterfox)
       browser=/usr/bin/waterfox
       browser_ld_library_path=$LD_LIBRARY_PATH
+      browser_args="-no-remote -profile $profile about:blank"
       ;;
     wfx.compositor=weston)
       compositor=weston
@@ -249,9 +265,11 @@ for arg in $(cat /proc/cmdline); do
     wfx.pref_profile=*)
       pref_profile=${arg#*=}
       ;;
+    wfx.moz_log=*)
+      moz_log=${arg#*=}
+      ;;
   esac
 done
-profile=/run/wfx-profile
 
 echo "wfx-kiosk-init: profile=$profile" >/dev/console
 echo "wfx-kiosk-init: renderer=${WLR_RENDERER-unset}" >/dev/console
@@ -262,6 +280,7 @@ echo "wfx-kiosk-init: scene_disable_visibility=${WLR_SCENE_DISABLE_VISIBILITY-un
 echo "wfx-kiosk-init: software_webrender=$software_webrender" >/dev/console
 echo "wfx-kiosk-init: full_damage=$full_damage" >/dev/console
 echo "wfx-kiosk-init: pref_profile=$pref_profile" >/dev/console
+echo "wfx-kiosk-init: moz_log=${moz_log:-unset}" >/dev/console
 echo "wfx-kiosk-init: browser=$browser" >/dev/console
 echo "wfx-kiosk-init: compositor=$compositor" >/dev/console
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME" "$XDG_CACHE_HOME"
@@ -353,6 +372,9 @@ if [ "$full_damage" = 1 ]; then
 else
   unset MOZ_WAYLAND_FULL_DAMAGE
 fi
+if [ -n "$moz_log" ]; then
+  export MOZ_LOG=$moz_log
+fi
 
 seatd -u root -g root -l error >/dev/console 2>&1 &
 sleep 1
@@ -363,11 +385,11 @@ case "$compositor" in
       echo "wfx-kiosk-init: weston is not installed; rebuild with WFX_QEMU_INCLUDE_WESTON=1" >/dev/console
       exit 1
     fi
-    weston --backend=drm --renderer=pixman --shell=kiosk-shell.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --no-config --continue-without-input --log=/dev/console -- env LD_LIBRARY_PATH="$browser_ld_library_path" "$browser" -no-remote -profile "$profile" about:blank >/dev/console 2>&1 &
+    weston --backend=drm --renderer=pixman --shell=kiosk-shell.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --no-config --continue-without-input --log=/dev/console -- env LD_LIBRARY_PATH="$browser_ld_library_path" "$browser" $browser_args >/dev/console 2>&1 &
     compositor_pid=$!
     ;;
   *)
-    cage -- env LD_LIBRARY_PATH="$browser_ld_library_path" "$browser" -no-remote -profile "$profile" about:blank >/dev/console 2>&1 &
+    cage -- env LD_LIBRARY_PATH="$browser_ld_library_path" "$browser" $browser_args >/dev/console 2>&1 &
     compositor_pid=$!
     ;;
 esac

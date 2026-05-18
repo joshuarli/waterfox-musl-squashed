@@ -322,21 +322,35 @@ Cocoa` can leave the host window black even though QEMU `screendump` captures a
 valid Waterfox framebuffer. Treat `hvf + bochs` as a diagnostic-only path and
 set `WFX_QEMU_ALLOW_HVF_BOCHS=1` only when intentionally reproducing it.
 
-For the current stale popup/text rendering issue, compare `tcg + virtio` with
-`hvf + virtio` before changing Gecko. If both fail, suspect QEMU virtio-gpu
-scanout regardless of accelerator. If only HVF fails, suspect QEMU/HVF virtio
-DMA or scanout behavior. `WFX_QEMU_GPU_OPTS` appends raw options to the display
-device for narrow experiments, and `WFX_QEMU_VNC` adds a VNC display for
-checking a framebuffer without relying on Cocoa.
+The popup/text rendering issue was traced to zero-sized chrome fonts, not a
+QEMU scanout failure. Instrumentation showed `nsMenuPopupFrame` had real labels
+but `StyleFont()->mFont.size == 0`; forcing `userChrome.css` font-size fixed the
+menus. The durable fix is in `widget/gtk/nsLookAndFeel.cpp`: clamp invalid GTK
+text scale from `gdk_screen_get_resolution()` back to `1.0f` and fall back when
+GTK/Pango reports a missing family or non-positive font size.
+
+Keep the old QEMU display toggles as diagnostics only. `WFX_QEMU_GPU_OPTS`
+appends raw options to the display device for narrow experiments, and
+`WFX_QEMU_VNC` adds a VNC display for checking a framebuffer without relying on
+Cocoa.
 
 Use `docker/waterfox-musl/qemu-repro-hamburger` as the fast visible regression
-loop for this bug. It boots the snapshot, waits for Waterfox, clicks the toolbar
-hamburger through QMP, writes full-frame PPM screenshots, and also writes a
-right-edge strip (`after-hamburger-right64.ppm`) that captures the known bad
-blank vertical menu surface. The harness records `before_black`/`after_black`
-with luma stats in `repro.txt` and exits nonzero on effectively black frames by
-default; set `WFX_REPRO_FAIL_ON_BLACK=0` only when intentionally collecting a
-black-screen run.
+loop for this bug. It boots the snapshot, waits for Waterfox, clicks through
+QMP, writes full-frame PPM screenshots, and also writes a right-edge strip
+(`after-hamburger-right64.ppm`) that captures the old blank vertical menu
+surface. Set `WFX_REPRO_BUTTON=right` for context menus and `WFX_REPRO_TEXT` to
+type into the focused control after clicking. The harness records
+`before_black`/`after_black` with luma stats in `repro.txt` and exits nonzero on
+effectively black frames by default; set `WFX_REPRO_FAIL_ON_BLACK=0` only when
+intentionally collecting a black-screen run.
+
+There is now a minimal adjacent GTK control at
+`docker/waterfox-musl/gtk-popup-repro.c`, packaged into the QEMU image as
+`/usr/bin/wfx-gtk-popup-repro`. Run it with
+`WFX_QEMU_GUEST_BROWSER=gtk-popup-repro docker/waterfox-musl/qemu-repro-hamburger`.
+The harness automatically uses the GTK button click coordinates in that mode.
+On `hvf + virtio + cage`, the GTK menu renders correctly. That ruled out the
+generic GTK/Wayland popup path before the zero-font root cause was found.
 
 Latest diagnostic result: `tcg + virtio` stalls at a black guest display with a
 mouse pointer after the kiosk init banner, so virtio-gpu is suspect independent

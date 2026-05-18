@@ -118,7 +118,8 @@ static float GetGtkTextScaleFactor() {
   if (!s) {
     return 1.0f;
   }
-  return float(gdk_screen_get_resolution(s) / 96.0);
+  const float scale = float(gdk_screen_get_resolution(s) / 96.0);
+  return scale > 0.0f ? scale : 1.0f;
 }
 
 static bool sCSDAvailable;
@@ -1244,7 +1245,8 @@ static void GetSystemFontInfo(GtkStyleContext* aStyle, nsString* aFontName,
   aFontStyle->systemFont = true;
 
   constexpr auto quote = u"\""_ns;
-  NS_ConvertUTF8toUTF16 family(pango_font_description_get_family(desc));
+  const char* rawFamily = pango_font_description_get_family(desc);
+  NS_ConvertUTF8toUTF16 family(rawFamily ? rawFamily : "sans-serif");
   *aFontName = quote + family + quote;
 
   aFontStyle->weight =
@@ -1263,6 +1265,10 @@ static void GetSystemFontInfo(GtkStyleContext* aStyle, nsString* aFontName,
   } else {
     // |size| is in pango-points, so convert to pixels.
     size *= 96 / POINTS_PER_INCH_FLOAT;
+  }
+
+  if (size <= 0.0f) {
+    size = 12.0f;
   }
 
   // |size| is now pixels but not scaled for the hidpi displays,
