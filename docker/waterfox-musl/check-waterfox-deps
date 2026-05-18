@@ -9,7 +9,12 @@ allowed=${WFX_WATERFOX_ALLOWED_NEEDED:-$repo_root/docker/waterfox-musl/waterfox-
 report=${WFX_WATERFOX_DEPS_REPORT:-$cache/dist/waterfox-final.deps.txt}
 reject_report=${WFX_WATERFOX_DEPS_REJECT_REPORT:-$cache/dist/waterfox-final.rejected-deps.txt}
 needed_report=${WFX_WATERFOX_NEEDED_REPORT:-$cache/dist/waterfox-final.needed.txt}
-deny_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libasound|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+allow_alsa=${WFX_WATERFOX_ALLOW_ALSA:-0}
+deny_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+
+if [ "$allow_alsa" != 1 ]; then
+  deny_regex=$deny_regex'|libasound'
+fi
 
 fail() {
   printf 'wfx waterfox dependency check failed: %s\n' "$*" >&2
@@ -61,6 +66,10 @@ done < <(find "$stage/opt/waterfox" "$stage/opt/wfx/sysroot" -type f -print0)
 [ "$elf_count" -ne 0 ] || fail "no ELF files found in staged artifact"
 
 sort -u "$actual" -o "$actual"
+if [ "$allow_alsa" = 1 ] && grep -Eq '^libasound\.so' "$actual"; then
+  grep -E '^libasound\.so' "$actual" >> "$expected"
+  sort -u "$expected" -o "$expected"
+fi
 cp "$actual" "$needed_report"
 comm -23 "$actual" "$expected" > "$unexpected"
 comm -13 "$actual" "$expected" > "$missing"

@@ -13,6 +13,7 @@ RUN --mount=type=cache,target=/var/cache/apk \
     apk add --cache-dir /var/cache/apk --no-progress \
       autoconf \
       automake \
+      alsa-lib-dev \
       bash \
       bzip2 \
       bison \

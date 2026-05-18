@@ -40,6 +40,9 @@ guest_scene_disable_direct_scanout=${WFX_QEMU_GUEST_SCENE_DISABLE_DIRECT_SCANOUT
 guest_scene_disable_visibility=${WFX_QEMU_GUEST_SCENE_DISABLE_VISIBILITY:-}
 guest_pref_profile=${WFX_QEMU_GUEST_PREF_PROFILE:-}
 guest_moz_log=${WFX_QEMU_GUEST_MOZ_LOG:-}
+audio=${WFX_QEMU_AUDIO:-none}
+audio_file=${WFX_QEMU_AUDIO_FILE:-$qemu_dir/audio-test/waterfox-audio.wav}
+guest_audio_test=${WFX_QEMU_GUEST_AUDIO_TEST:-0}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
@@ -56,10 +59,13 @@ default_image_is_current() {
   [ -f "$image" ] || return 1
   [ -f "$kernel" ] || return 1
   [ -f "$manifest" ] || return 1
-  grep -qx 'qemu_image_version=10' "$manifest" || return 1
+  grep -qx 'qemu_image_version=11' "$manifest" || return 1
   grep -qx 'init_profile=/run/wfx-profile' "$manifest" || return 1
   if [ "$guest_compositor" = weston ]; then
     grep -qx 'include_weston=1' "$manifest" || return 1
+  fi
+  if [ "$audio" != none ] || [ "$guest_audio_test" = 1 ]; then
+    grep -qx 'include_alsa=1' "$manifest" || return 1
   fi
 }
 
@@ -68,6 +74,10 @@ if uses_default_artifacts && ! default_image_is_current; then
   if [ "$guest_compositor" = weston ]; then
     rebuild_env+=(WFX_QEMU_INCLUDE_WESTON=1)
     rebuild_env+=(WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-3072}")
+  fi
+  if [ "$audio" != none ] || [ "$guest_audio_test" = 1 ]; then
+    rebuild_env+=(WFX_QEMU_INCLUDE_ALSA=1)
+    rebuild_env+=(WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-2304}")
   fi
   if [ "${#rebuild_env[@]}" -gt 0 ]; then
     env "${rebuild_env[@]}" "$script_dir/wfx-musl" qemu-image
@@ -101,6 +111,22 @@ case "$guest_compositor" in
     ;;
   *)
     fail "unknown WFX_QEMU_GUEST_COMPOSITOR=$guest_compositor; expected cage or weston"
+    ;;
+esac
+
+case "$audio" in
+  none|wav|coreaudio)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_AUDIO=$audio; expected none, wav, or coreaudio"
+    ;;
+esac
+
+case "$guest_audio_test" in
+  0|1)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_GUEST_AUDIO_TEST=$guest_audio_test; expected 0 or 1"
     ;;
 esac
 
@@ -167,6 +193,11 @@ if [ -z "$gpu" ]; then
   esac
 fi
 
+audio_kernel=0
+if [ "$audio" != none ]; then
+  audio_kernel=1
+fi
+
 gcd() {
   local a=$1 b=$2 t
   while [ "$b" -ne 0 ]; do
@@ -207,12 +238,29 @@ args=(
   -m "$memory"
   -smp "$smp"
   -kernel "$kernel"
-  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}${guest_pref_profile:+ wfx.pref_profile=$guest_pref_profile}${guest_moz_log:+ wfx.moz_log=$guest_moz_log}"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}${guest_pref_profile:+ wfx.pref_profile=$guest_pref_profile}${guest_moz_log:+ wfx.moz_log=$guest_moz_log} wfx.audio_test=$guest_audio_test wfx.audio=$audio_kernel"
   -drive "file=$image,if=virtio,format=raw,snapshot=$snapshot"
   -serial "$serial"
   -monitor "$monitor"
   -display "$display"
 )
+
+case "$audio" in
+  wav)
+    mkdir -p "$(dirname "$audio_file")"
+    rm -f "$audio_file"
+    args+=(
+      -audiodev "wav,id=wfxaudio,path=$audio_file"
+      -device "virtio-sound-pci,audiodev=wfxaudio,streams=1"
+    )
+    ;;
+  coreaudio)
+    args+=(
+      -audiodev coreaudio,id=wfxaudio
+      -device "virtio-sound-pci,audiodev=wfxaudio,streams=1"
+    )
+    ;;
+esac
 
 if [ -n "$vnc" ]; then
   args+=(-vnc "$vnc")
@@ -307,7 +355,7 @@ if [ -f "$initramfs" ]; then
   args=(-initrd "$initramfs" "${args[@]}")
 fi
 
-printf 'wfx qemu: image=%s snapshot=%s accel=%s cpu=%s gpu=%s display=%s vnc=%s\n' "$image" "$snapshot" "$accel" "$cpu" "$gpu" "$display" "${vnc:-none}" >&2
+printf 'wfx qemu: image=%s snapshot=%s accel=%s cpu=%s gpu=%s display=%s vnc=%s audio=%s\n' "$image" "$snapshot" "$accel" "$cpu" "$gpu" "$display" "${vnc:-none}" "$audio" >&2
 "$qemu" "${args[@]}" &
 qemu_pid=$!
 

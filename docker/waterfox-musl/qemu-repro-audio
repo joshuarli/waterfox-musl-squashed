@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
+repro_id=${WFX_REPRO_ID:-audio}
+out_dir=$cache_dir/qemu/repro-audio-$repro_id
+wav=$out_dir/waterfox-audio.wav
+serial_log=$out_dir/serial.log
+report=$out_dir/repro.txt
+timeout_seconds=${WFX_REPRO_AUDIO_TIMEOUT:-75}
+
+fail() {
+  printf 'wfx qemu audio repro failed: %s\n' "$*" >&2
+  if [ -f "$serial_log" ]; then
+    tail -n 80 "$serial_log" >&2 || true
+  fi
+  exit 1
+}
+
+rm -rf "$out_dir"
+mkdir -p "$out_dir"
+
+status=0
+timeout -s INT "${timeout_seconds}s" env \
+  WFX_QEMU_AUDIO=wav \
+  WFX_QEMU_AUDIO_FILE="$wav" \
+  WFX_QEMU_DISPLAY=none \
+  WFX_QEMU_SERIAL="file:$serial_log" \
+  WFX_QEMU_GUEST_AUDIO_TEST=1 \
+  WFX_QEMU_INCLUDE_ALSA=1 \
+  WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-2304}" \
+  "$script_dir/wfx-musl" qemu-run || status=$?
+
+case "$status" in
+  0|124|130)
+    ;;
+  *)
+    fail "qemu-run exited with status $status"
+    ;;
+esac
+
+python3 - "$wav" "$report" <<'PY'
+import sys
+from pathlib import Path
+
+wav_path = Path(sys.argv[1])
+report_path = Path(sys.argv[2])
+
+if not wav_path.exists():
+    raise SystemExit("missing WAV capture")
+
+raw = wav_path.read_bytes()
+if len(raw) < 44 or raw[:4] != b"RIFF" or raw[8:12] != b"WAVE":
+    raise SystemExit("not a RIFF/WAVE capture")
+
+channels = None
+sample_width = None
+rate = None
+data = None
+offset = 12
+while offset + 8 <= len(raw):
+    chunk_id = raw[offset : offset + 4]
+    chunk_size = int.from_bytes(raw[offset + 4 : offset + 8], "little")
+    chunk_start = offset + 8
+    chunk_end = chunk_start + chunk_size
+    if chunk_id == b"fmt ":
+        if chunk_size < 16 or chunk_end > len(raw):
+            raise SystemExit("invalid WAV fmt chunk")
+        audio_format = int.from_bytes(raw[chunk_start : chunk_start + 2], "little")
+        channels = int.from_bytes(raw[chunk_start + 2 : chunk_start + 4], "little")
+        rate = int.from_bytes(raw[chunk_start + 4 : chunk_start + 8], "little")
+        bits_per_sample = int.from_bytes(raw[chunk_start + 14 : chunk_start + 16], "little")
+        if audio_format != 1:
+            raise SystemExit(f"expected PCM WAV, got audio_format={audio_format}")
+        sample_width = bits_per_sample // 8
+    elif chunk_id == b"data":
+        if chunk_size == 0:
+            data = raw[chunk_start:]
+            break
+        if chunk_end > len(raw):
+            raise SystemExit("truncated WAV data chunk")
+        data = raw[chunk_start:chunk_end]
+    offset = chunk_end + (chunk_size % 2)
+
+if channels is None or sample_width is None or rate is None or data is None:
+    raise SystemExit("missing required WAV chunks")
+
+frames = len(data) // (channels * sample_width)
+
+duration = frames / rate if rate else 0.0
+if sample_width != 2:
+    raise SystemExit(f"expected 16-bit PCM, got sample_width={sample_width}")
+if duration < 2.0:
+    raise SystemExit(f"WAV capture too short: {duration:.2f}s")
+if not data:
+    raise SystemExit("WAV capture has no PCM data")
+
+if len(data) % sample_width:
+    raise SystemExit("WAV capture has partial PCM samples")
+
+sample_count = len(data) // sample_width
+samples = [
+    int.from_bytes(data[offset : offset + sample_width], "little", signed=True)
+    for offset in range(0, len(data), sample_width)
+]
+
+max_abs = max(abs(sample) for sample in samples)
+rms = int((sum(sample * sample for sample in samples) / sample_count) ** 0.5)
+window_frames = max(rate // 10, 1)
+window_bytes = window_frames * channels * sample_width
+active_windows = 0
+total_windows = 0
+for offset in range(0, len(data), window_bytes):
+    window = data[offset : offset + window_bytes]
+    if len(window) < window_bytes:
+        continue
+    total_windows += 1
+    window_samples = [
+        int.from_bytes(window[index : index + sample_width], "little", signed=True)
+        for index in range(0, len(window), sample_width)
+    ]
+    window_rms = int(
+        (sum(sample * sample for sample in window_samples) / len(window_samples)) ** 0.5
+    )
+    if window_rms > 300:
+        active_windows += 1
+
+active_ratio = active_windows / total_windows if total_windows else 0.0
+if max_abs < 500:
+    raise SystemExit(f"WAV capture is effectively silent: max_abs={max_abs}")
+if rms < 150:
+    raise SystemExit(f"WAV capture RMS is too low: rms={rms}")
+if active_ratio < 0.20:
+    raise SystemExit(f"WAV capture is not sustained enough: active_ratio={active_ratio:.3f}")
+if max_abs > 32500:
+    raise SystemExit(f"WAV capture is clipped: max_abs={max_abs}")
+
+with report_path.open("w") as report:
+    report.write("result=pass\n")
+    report.write(f"wav={wav_path}\n")
+    report.write(f"duration={duration:.3f}\n")
+    report.write(f"channels={channels}\n")
+    report.write(f"sample_rate={rate}\n")
+    report.write(f"max_abs={max_abs}\n")
+    report.write(f"rms={rms}\n")
+    report.write(f"active_ratio={active_ratio:.3f}\n")
+PY
+
+printf 'QEMU audio repro passed: %s\n' "$report"

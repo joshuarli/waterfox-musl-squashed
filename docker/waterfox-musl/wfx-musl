@@ -8,6 +8,7 @@ image=${WFX_IMAGE:-waterfox-musl:edge-clang22}
 platform=${WFX_DOCKER_PLATFORM:-linux/arm64}
 cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
 default_mozconfig=/work/docker/waterfox-musl/mozconfig.stage1
+alsa_debug_mozconfig=/work/docker/waterfox-musl/mozconfig.alsa-debug
 release_mozconfig=/work/docker/waterfox-musl/mozconfig.release
 folded_release_mozconfig=/work/docker/waterfox-musl/mozconfig.folded-release
 
@@ -26,6 +27,9 @@ commands:
   configure         Reserved for the Gecko patch/configure tranche.
   build             Reserved for the Waterfox build tranche.
   package           Reserved for the package tranche.
+  configure-alsa    Configure the debug ALSA build.
+  build-alsa        Build the debug ALSA build.
+  package-alsa      Package the debug ALSA build.
   check             Reserved for static dependency checks.
   waterfox-deps     Verify final staged Waterfox ELF dependencies.
   configure-release Configure the optimized release build.
@@ -41,6 +45,7 @@ commands:
   kiosk-compositor  Build the custom DRM/libinput cage compositor.
   qemu-image        Assemble the QEMU Alpine aarch64 kiosk rootfs image.
   qemu-run          Boot the QEMU visible kiosk proof.
+  qemu-audio        Boot QEMU, capture Waterfox audio to WAV, and verify it.
 EOF
 }
 
@@ -59,6 +64,7 @@ ensure_cache_dirs() {
     "$cache_dir/obj-aarch64-unknown-linux-musl" \
     "$cache_dir/obj-aarch64-alpine-linux-musl" \
     "$cache_dir/obj-aarch64-alpine-linux-musl/dist/system_wrappers" \
+    "$cache_dir/obj-aarch64-alpine-linux-musl-alsa-debug/dist/system_wrappers" \
     "$cache_dir/obj-aarch64-alpine-linux-musl-release/dist/system_wrappers" \
     "$cache_dir/obj-aarch64-alpine-linux-musl-folded-release/dist/system_wrappers" \
     "$cache_dir/dist" \
@@ -100,6 +106,7 @@ run_in_image() {
     --env WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-2048}" \
     --env WFX_QEMU_INCLUDE_ALPINE_FIREFOX="${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}" \
     --env WFX_QEMU_INCLUDE_WESTON="${WFX_QEMU_INCLUDE_WESTON:-0}" \
+    --env WFX_QEMU_INCLUDE_ALSA="${WFX_QEMU_INCLUDE_ALSA:-0}" \
     "$image" \
     "$@"
 }
@@ -131,6 +138,8 @@ run_shell() {
     --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
     --env WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-2048}" \
     --env WFX_QEMU_INCLUDE_ALPINE_FIREFOX="${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}" \
+    --env WFX_QEMU_INCLUDE_WESTON="${WFX_QEMU_INCLUDE_WESTON:-0}" \
+    --env WFX_QEMU_INCLUDE_ALSA="${WFX_QEMU_INCLUDE_ALSA:-0}" \
     "$image" \
     bash
 }
@@ -147,6 +156,10 @@ refresh_qemu_image() {
 
 run_release_in_image() {
   WFX_MOZCONFIG=$release_mozconfig run_in_image "$@"
+}
+
+run_alsa_debug_in_image() {
+  WFX_MOZCONFIG=$alsa_debug_mozconfig run_in_image "$@"
 }
 
 run_folded_release_in_image() {
@@ -174,6 +187,9 @@ cmake
 pkgconf
 python3
 nodejs-current
+alsa-lib
+alsa-lib-dev
+alsa-utils
 gtk+3.0
 cairo
 glib
@@ -267,6 +283,15 @@ case "$command" in
   package)
     run_in_image sh -euc './mach package && /work/docker/waterfox-musl/package-stage1'
     ;;
+  configure-alsa)
+    run_alsa_debug_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_CONFIG_MODE=alsa-debug /work/docker/waterfox-musl/check-config'
+    ;;
+  build-alsa)
+    run_alsa_debug_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_CONFIG_MODE=alsa-debug /work/docker/waterfox-musl/check-config && ./mach build'
+    ;;
+  package-alsa)
+    run_alsa_debug_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_STAGE_ROOT=/cache/dist/alsa-debug-root WFX_STAGE_ARTIFACT_SUFFIX=alsa-debug WFX_PACKAGE_ALSA=1 WFX_WATERFOX_ALLOW_ALSA=1 /work/docker/waterfox-musl/package-stage1'
+    ;;
   configure-release)
     run_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_CONFIG_MODE=release /work/docker/waterfox-musl/check-config'
     ;;
@@ -298,10 +323,10 @@ case "$command" in
     refresh_qemu_image
     ;;
   qemu-run)
-    if uses_default_qemu_artifacts && [ ! -f "$cache_dir/qemu/waterfox-kiosk.ext4" ]; then
-      refresh_qemu_image
-    fi
     "$script_dir/qemu-run"
+    ;;
+  qemu-audio)
+    "$script_dir/qemu-repro-audio"
     ;;
   -h|--help|help)
     usage

@@ -43,16 +43,25 @@ case "$mode" in
   debug)
     require_config MOZ_DEBUG 1
     reject_config_key MOZ_OPTIMIZE
+    require_config MOZ_AUDIO_BACKENDS_NONE 1
+    reject_config_key MOZ_ALSA
     ;;
   release)
     reject_config_key MOZ_DEBUG
     require_config MOZ_OPTIMIZE 1
+    require_config MOZ_AUDIO_BACKENDS_NONE 1
+    reject_config_key MOZ_ALSA
+    ;;
+  alsa-debug)
+    require_config MOZ_DEBUG 1
+    reject_config_key MOZ_OPTIMIZE
+    require_config MOZ_ALSA 1
+    reject_config_key MOZ_AUDIO_BACKENDS_NONE
     ;;
   *)
-    fail "unknown WFX_CONFIG_MODE=$mode; expected debug or release"
+    fail "unknown WFX_CONFIG_MODE=$mode; expected debug, release, or alsa-debug"
     ;;
 esac
-require_config MOZ_AUDIO_BACKENDS_NONE 1
 require_config MOZ_MIMALLOC_REPLACE 1
 require_config WFX_MIMALLOC_PREFIX /opt/wfx/build-deps/mimalloc
 require_config MOZ_LIBCLANG_PATH /usr/lib/llvm21/lib
@@ -71,7 +80,6 @@ reject_config_key MOZ_GECKO_PROFILER
 reject_config_key MOZ_UNIVERSALCHARDET
 reject_config_key MOZ_ZIPWRITER
 reject_config_key MOZ_WEBRTC
-reject_config_key MOZ_ALSA
 reject_config_key MOZ_PULSEAUDIO
 reject_config_key MOZ_SYSTEM_PIPEWIRE
 reject_config_key MOZ_ENABLE_VAAPI
@@ -96,9 +104,21 @@ grep -Eq -- "-fuse-ld=mold" "$config" ||
 grep -Eq -- "--pack-dyn-relocs=none" "$config" ||
   fail "packed relative relocations were not disabled"
 
-if grep -Eq 'checking (MOZ_ALSA|MOZ_PULSEAUDIO|MOZ_DBUS|MOZ_PIPEWIRE)|checking for (alsa|libpulse|dbus-1|libpipewire)' "$log"; then
-  fail "audio, DBus, or PipeWire pkg-config check ran"
-fi
+case "$mode" in
+  alsa-debug)
+    if ! grep -Eq 'checking (MOZ_ALSA)|checking for alsa' "$log"; then
+      fail "ALSA pkg-config check did not run"
+    fi
+    if grep -Eq 'checking (MOZ_PULSEAUDIO|MOZ_DBUS|MOZ_PIPEWIRE)|checking for (libpulse|dbus-1|libpipewire)' "$log"; then
+      fail "PulseAudio, DBus, or PipeWire pkg-config check ran"
+    fi
+    ;;
+  *)
+    if grep -Eq 'checking (MOZ_ALSA|MOZ_PULSEAUDIO|MOZ_DBUS|MOZ_PIPEWIRE)|checking for (alsa|libpulse|dbus-1|libpipewire)' "$log"; then
+      fail "audio, DBus, or PipeWire pkg-config check ran"
+    fi
+    ;;
+esac
 
 if [ -f "$compile_commands" ] &&
    grep -Eq '(^|[/" ])gcc([ "./-]|$)|(^|[/" ])g\+\+([ "./-]|$)' "$compile_commands"; then

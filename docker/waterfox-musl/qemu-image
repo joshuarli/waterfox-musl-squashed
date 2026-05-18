@@ -13,7 +13,12 @@ compositor=${WFX_KIOSK_COMPOSITOR:-/opt/wfx/kiosk-compositor}
 image_mb=${WFX_QEMU_IMAGE_MB:-2048}
 include_alpine_firefox=${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}
 include_weston=${WFX_QEMU_INCLUDE_WESTON:-0}
-qemu_image_version=10
+include_alsa=${WFX_QEMU_INCLUDE_ALSA:-0}
+qemu_image_version=11
+
+if [ "$include_alsa" = 1 ] && [ -z "${WFX_STAGE_ROOT+x}" ]; then
+  stage=$cache/dist/alsa-debug-root
+fi
 
 fail() {
   printf 'wfx qemu image failed: %s\n' "$*" >&2
@@ -67,6 +72,29 @@ install_rootfs_packages() {
       seatd \
       shared-mime-info \
       wayland >/dev/null
+  if [ "$include_alsa" = 1 ]; then
+    apk --root "$rootfs" \
+      --arch aarch64 \
+      --keys-dir /etc/apk/keys \
+      --repositories-file /etc/apk/repositories \
+      --cache-dir /var/cache/apk \
+      add --no-progress --no-scripts alsa-lib alsa-utils >/dev/null
+    mkdir -p "$rootfs/etc"
+    cat > "$rootfs/etc/asound.conf" <<'EOF'
+defaults.pcm.card 0
+defaults.ctl.card 0
+
+pcm.!default {
+  type plug
+  slave.pcm "hw:0,0"
+}
+
+ctl.!default {
+  type hw
+  card 0
+}
+EOF
+  fi
   if [ "$include_alpine_firefox" = 1 ]; then
     apk --root "$rootfs" \
       --arch aarch64 \
@@ -107,6 +135,31 @@ install_payloads() {
     "$repo_root/docker/waterfox-musl/gtk-popup-repro.c" \
     -o "$rootfs/usr/bin/wfx-gtk-popup-repro" \
     $(pkg-config --libs gtk+-3.0)
+  mkdir -p "$rootfs/usr/share/wfx"
+  cat > "$rootfs/usr/share/wfx/audio-test.html" <<'EOF'
+<!doctype html>
+<meta charset="utf-8">
+<title>Waterfox ALSA audio test</title>
+<body>
+<script>
+"use strict";
+
+async function start() {
+  const context = new AudioContext({ sampleRate: 48000 });
+  const gain = new GainNode(context, { gain: 0.20 });
+  const oscillator = new OscillatorNode(context, { frequency: 880, type: "sine" });
+  oscillator.connect(gain).connect(context.destination);
+  oscillator.start();
+  await context.resume();
+  document.title = `Waterfox ALSA audio test: ${context.state}`;
+  setInterval(() => context.resume(), 1000);
+}
+
+start().catch(error => {
+  document.title = `Waterfox ALSA audio test failed: ${error}`;
+});
+</script>
+EOF
 }
 
 install_kiosk_init() {
@@ -178,6 +231,14 @@ export WLR_SCENE_DEBUG_DAMAGE=rerender
 export WLR_SCENE_DISABLE_DIRECT_SCANOUT=1
 export WLR_SCENE_DISABLE_VISIBILITY=1
 export SEATD_SOCK=/run/seatd.sock
+audio_enabled=0
+for arg in $(cat /proc/cmdline); do
+  case "$arg" in
+    wfx.audio=1)
+      audio_enabled=1
+      ;;
+  esac
+done
 profile=/run/wfx-profile
 browser=/usr/bin/waterfox
 browser_ld_library_path=$LD_LIBRARY_PATH
@@ -186,6 +247,7 @@ compositor=cage
 software_webrender=0
 full_damage=1
 pref_profile=default
+audio_test=0
 moz_log=
 for arg in $(cat /proc/cmdline); do
   case "$arg" in
@@ -265,6 +327,12 @@ for arg in $(cat /proc/cmdline); do
     wfx.pref_profile=*)
       pref_profile=${arg#*=}
       ;;
+    wfx.audio=1)
+      audio_enabled=1
+      ;;
+    wfx.audio_test=1)
+      audio_test=1
+      ;;
     wfx.moz_log=*)
       moz_log=${arg#*=}
       ;;
@@ -280,6 +348,8 @@ echo "wfx-kiosk-init: scene_disable_visibility=${WLR_SCENE_DISABLE_VISIBILITY-un
 echo "wfx-kiosk-init: software_webrender=$software_webrender" >/dev/console
 echo "wfx-kiosk-init: full_damage=$full_damage" >/dev/console
 echo "wfx-kiosk-init: pref_profile=$pref_profile" >/dev/console
+echo "wfx-kiosk-init: audio_enabled=$audio_enabled" >/dev/console
+echo "wfx-kiosk-init: audio_test=$audio_test" >/dev/console
 echo "wfx-kiosk-init: moz_log=${moz_log:-unset}" >/dev/console
 echo "wfx-kiosk-init: browser=$browser" >/dev/console
 echo "wfx-kiosk-init: compositor=$compositor" >/dev/console
@@ -320,6 +390,12 @@ user_pref("waterfox.blocker.enabled", false);
 user_pref("waterfox.blocker.remoteResourcesEnabled", false);
 user_pref("waterfox.blocker.ui.enabled", false);
 PROFILE_EOF
+if [ "$audio_test" = 1 ]; then
+  browser_args="-no-remote -profile $profile file:///usr/share/wfx/audio-test.html"
+  echo 'user_pref("media.autoplay.default", 0);' >> "$profile/user.js"
+  echo 'user_pref("media.autoplay.blocking_policy", 0);' >> "$profile/user.js"
+  echo 'user_pref("media.autoplay.block-event.enabled", false);' >> "$profile/user.js"
+fi
 old_ifs=$IFS
 IFS=,
 for profile_name in $pref_profile; do
@@ -374,6 +450,22 @@ else
 fi
 if [ -n "$moz_log" ]; then
   export MOZ_LOG=$moz_log
+fi
+if [ "$audio_enabled" = 1 ]; then
+  export CUBEB_BACKEND=alsa
+  for module in snd snd_pcm snd_timer virtio_snd; do
+    if ! modprobe "$module" >/dev/console 2>&1; then
+      echo "wfx-kiosk-init: failed to load audio module $module" >/dev/console
+    fi
+  done
+  if command -v aplay >/dev/null 2>&1; then
+    aplay -l >/dev/console 2>&1 || echo "wfx-kiosk-init: aplay -l failed" >/dev/console
+  fi
+  if command -v amixer >/dev/null 2>&1; then
+    for control in Master PCM Speaker Headphone; do
+      amixer -q sset "$control" 100% unmute >/dev/console 2>&1 || true
+    done
+  fi
 fi
 
 seatd -u root -g root -l error >/dev/console 2>&1 &
@@ -459,6 +551,7 @@ write_manifest() {
     printf 'init_profile=/run/wfx-profile\n'
     printf 'include_alpine_firefox=%s\n' "$include_alpine_firefox"
     printf 'include_weston=%s\n' "$include_weston"
+    printf 'include_alsa=%s\n' "$include_alsa"
     printf 'created_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf 'waterfox_stage=%s\n' "$stage"
     printf 'compositor=%s\n' "$compositor"
