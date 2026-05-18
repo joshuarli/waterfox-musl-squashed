@@ -29,7 +29,7 @@ The active build uses:
 ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
 ```
 
-In [toolkit/moz.configure](/private/tmp/waterfox-musl-squashed/toolkit/moz.configure), all non-Windows/macOS/iOS/Android Linux choices currently map `cairo-gtk3*` to:
+In toolkit/moz.configure, all non-Windows/macOS/iOS/Android Linux choices currently map `cairo-gtk3*` to:
 
 ```python
 MOZ_WIDGET_TOOLKIT = "gtk"
@@ -37,23 +37,23 @@ MOZ_WIDGET_TOOLKIT = "gtk"
 
 The relevant backend directories are:
 
-- [widget/gtk](/private/tmp/waterfox-musl-squashed/widget/gtk): current Linux GTK/Wayland backend
-- [widget/headless](/private/tmp/waterfox-musl-squashed/widget/headless): useful for stubs and no-window behavior
-- [widget/generic](/private/tmp/waterfox-musl-squashed/widget/generic): generic compositor IPDL definitions
-- [widget/moz.build](/private/tmp/waterfox-musl-squashed/widget/moz.build): selects backend dirs, IPDL, includes, and toolkit-specific XPIDL
+- widget/gtk: current Linux GTK/Wayland backend
+- widget/headless: useful for stubs and no-window behavior
+- widget/generic: generic compositor IPDL definitions
+- widget/moz.build: selects backend dirs, IPDL, includes, and toolkit-specific XPIDL
 
 Important GTK files to study first:
 
-- [widget/gtk/nsWindow.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/nsWindow.cpp): main native window implementation
-- [widget/gtk/nsWindow.h](/private/tmp/waterfox-musl-squashed/widget/gtk/nsWindow.h): surface area that a replacement backend must satisfy
-- [widget/gtk/nsClipboardWayland.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/nsClipboardWayland.cpp): Wayland clipboard behavior
-- [widget/gtk/nsWaylandDisplay.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/nsWaylandDisplay.cpp): Wayland display globals and event handling
-- [widget/gtk/MozContainerWayland.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/MozContainerWayland.cpp): GTK container bridge to Wayland surfaces
-- [widget/gtk/WindowSurfaceWaylandMultiBuffer.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/WindowSurfaceWaylandMultiBuffer.cpp): software surface path
-- [widget/gtk/nsGtkKeyUtils.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/nsGtkKeyUtils.cpp): key mapping details
-- [widget/gtk/IMContextWrapper.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/IMContextWrapper.cpp): GTK IME integration to avoid or replace
-- [widget/gtk/nsLookAndFeel.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/nsLookAndFeel.cpp): GTK theme/settings source
-- [widget/gtk/ScreenHelperGTK.cpp](/private/tmp/waterfox-musl-squashed/widget/gtk/ScreenHelperGTK.cpp): monitor/screen metrics
+- widget/gtk/nsWindow.cpp: main native window implementation
+- widget/gtk/nsWindow.h: surface area that a replacement backend must satisfy
+- widget/gtk/nsClipboardWayland.cpp: Wayland clipboard behavior
+- widget/gtk/nsWaylandDisplay.cpp: Wayland display globals and event handling
+- widget/gtk/MozContainerWayland.cpp): GTK container bridge to Wayland surfaces
+- widget/gtk/WindowSurfaceWaylandMultiBuffer.cpp: software surface path
+- widget/gtk/nsGtkKeyUtils.cpp: key mapping details
+- widget/gtk/IMContextWrapper.cpp: GTK IME integration to avoid or replace
+- widget/gtk/nsLookAndFeel.cpp: GTK theme/settings source
+- widget/gtk/ScreenHelperGTK.cpp: monitor/screen metrics
 
 ## Proposed Backend Shape
 

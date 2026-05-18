@@ -5,8 +5,6 @@ artifacts for Laputa. The first milestone is a narrow, visible browser proof:
 Waterfox starts on `about:blank` under a minimal Wayland-only kiosk environment,
 built with Alpine, clang/LLVM, mold, and musl, with no X11 and no audio stack.
 
-The active squashed worktree is `/tmp/waterfox-musl-squashed`. The original
-unsquashed checkout used during bring-up was `/Users/josh/d/waterfox-musl`.
 Alpine's Firefox package and patches are available at
 `/Users/josh/d/kominka/aports/community/firefox/` and remain the first reference
 when adapting musl or packaging fixes.
@@ -57,6 +55,11 @@ when adapting musl or packaging fixes.
   `widget/gtk/nsLookAndFeel.cpp`.
 - Release build and package pass in the separate release objdir, producing a
   staged release artifact and manifest with dependency scans.
+- The experimental folded-library release builds and packages, but it is not a
+  usable release path yet: QEMU boots and browser chrome works, while loading
+  normal websites fails with the in-content "Try Again" network error page.
+  Debug and normal release QEMU images can load `google.com`, so the regression
+  is specific to the folded release profile.
 
 ## Main Commands
 
@@ -257,6 +260,30 @@ Important release choices:
 Do not enable Alpine system NSS, NSPR, SQLite, ICU, media codec, or other large
 system-library substitutions as part of stage 1 unless a task explicitly targets
 that dependency policy.
+
+### Folded Release TODO
+
+The folded release profile is experimental and must not replace the normal
+release artifact until website loading is fixed and covered by a QEMU smoke.
+It is selected by `docker/waterfox-musl/mozconfig.folded-release` and the
+`configure-folded-release`, `build-folded-release`, and
+`package-folded-release` commands.
+
+Known current state:
+
+- Builds and packages successfully.
+- Folds away separate `libmozsqlite3`, NSPR, and NSS helper libraries from the
+  staged `/opt/waterfox` dependency list.
+- Boots in QEMU and renders browser chrome.
+- Fails to load normal websites, showing the browser "Try Again" page instead.
+- The same QEMU image path built from debug `stage1-root` and normal
+  `release-root` can load `google.com`.
+
+Future investigation should first isolate which folded library causes the
+network/page-load regression. Start by partially backing out folding around
+NSS/NSPR and SQLite rather than changing QEMU, networking, or the kiosk
+compositor. Add a QEMU smoke that opens an HTTPS URL and treats the in-content
+"Try Again" page as failure before considering folded release usable.
 
 ## Runtime Sysroot
 
