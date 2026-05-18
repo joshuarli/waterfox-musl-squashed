@@ -12,6 +12,7 @@ compositor=${WFX_KIOSK_COMPOSITOR:-/opt/wfx/kiosk-compositor}
 image_mb=${WFX_QEMU_IMAGE_MB:-2048}
 include_alpine_firefox=${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}
 include_weston=${WFX_QEMU_INCLUDE_WESTON:-0}
+qemu_image_version=5
 
 fail() {
   printf 'wfx qemu image failed: %s\n' "$*" >&2
@@ -176,6 +177,7 @@ browser_ld_library_path=$LD_LIBRARY_PATH
 compositor=cage
 software_webrender=0
 full_damage=1
+pref_profile=default
 for arg in $(cat /proc/cmdline); do
   case "$arg" in
     wfx.browser=firefox)
@@ -193,19 +195,44 @@ for arg in $(cat /proc/cmdline); do
       compositor=cage
       ;;
     wfx.wlr_renderer=*)
-      export WLR_RENDERER=${arg#*=}
+      value=${arg#*=}
+      if [ "$value" = unset ]; then
+        unset WLR_RENDERER
+      else
+        export WLR_RENDERER=$value
+      fi
       ;;
     wfx.drm_no_atomic=*)
-      export WLR_DRM_NO_ATOMIC=${arg#*=}
+      value=${arg#*=}
+      if [ "$value" = unset ]; then
+        unset WLR_DRM_NO_ATOMIC
+      else
+        export WLR_DRM_NO_ATOMIC=$value
+      fi
       ;;
     wfx.scene_debug_damage=*)
-      export WLR_SCENE_DEBUG_DAMAGE=${arg#*=}
+      value=${arg#*=}
+      if [ "$value" = unset ]; then
+        unset WLR_SCENE_DEBUG_DAMAGE
+      else
+        export WLR_SCENE_DEBUG_DAMAGE=$value
+      fi
       ;;
     wfx.scene_disable_direct_scanout=*)
-      export WLR_SCENE_DISABLE_DIRECT_SCANOUT=${arg#*=}
+      value=${arg#*=}
+      if [ "$value" = unset ]; then
+        unset WLR_SCENE_DISABLE_DIRECT_SCANOUT
+      else
+        export WLR_SCENE_DISABLE_DIRECT_SCANOUT=$value
+      fi
       ;;
     wfx.scene_disable_visibility=*)
-      export WLR_SCENE_DISABLE_VISIBILITY=${arg#*=}
+      value=${arg#*=}
+      if [ "$value" = unset ]; then
+        unset WLR_SCENE_DISABLE_VISIBILITY
+      else
+        export WLR_SCENE_DISABLE_VISIBILITY=$value
+      fi
       ;;
     wfx.software_webrender=*)
       software_webrender=${arg#*=}
@@ -219,18 +246,22 @@ for arg in $(cat /proc/cmdline); do
     wfx.mesa_loader=*)
       export MESA_LOADER_DRIVER_OVERRIDE=${arg#*=}
       ;;
+    wfx.pref_profile=*)
+      pref_profile=${arg#*=}
+      ;;
   esac
 done
 profile=/run/wfx-profile
 
 echo "wfx-kiosk-init: profile=$profile" >/dev/console
-echo "wfx-kiosk-init: renderer=$WLR_RENDERER" >/dev/console
-echo "wfx-kiosk-init: drm_no_atomic=$WLR_DRM_NO_ATOMIC" >/dev/console
-echo "wfx-kiosk-init: scene_debug_damage=$WLR_SCENE_DEBUG_DAMAGE" >/dev/console
-echo "wfx-kiosk-init: scene_disable_direct_scanout=$WLR_SCENE_DISABLE_DIRECT_SCANOUT" >/dev/console
-echo "wfx-kiosk-init: scene_disable_visibility=$WLR_SCENE_DISABLE_VISIBILITY" >/dev/console
+echo "wfx-kiosk-init: renderer=${WLR_RENDERER-unset}" >/dev/console
+echo "wfx-kiosk-init: drm_no_atomic=${WLR_DRM_NO_ATOMIC-unset}" >/dev/console
+echo "wfx-kiosk-init: scene_debug_damage=${WLR_SCENE_DEBUG_DAMAGE-unset}" >/dev/console
+echo "wfx-kiosk-init: scene_disable_direct_scanout=${WLR_SCENE_DISABLE_DIRECT_SCANOUT-unset}" >/dev/console
+echo "wfx-kiosk-init: scene_disable_visibility=${WLR_SCENE_DISABLE_VISIBILITY-unset}" >/dev/console
 echo "wfx-kiosk-init: software_webrender=$software_webrender" >/dev/console
 echo "wfx-kiosk-init: full_damage=$full_damage" >/dev/console
+echo "wfx-kiosk-init: pref_profile=$pref_profile" >/dev/console
 echo "wfx-kiosk-init: browser=$browser" >/dev/console
 echo "wfx-kiosk-init: compositor=$compositor" >/dev/console
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME" "$XDG_CACHE_HOME"
@@ -270,6 +301,46 @@ user_pref("waterfox.blocker.enabled", false);
 user_pref("waterfox.blocker.remoteResourcesEnabled", false);
 user_pref("waterfox.blocker.ui.enabled", false);
 PROFILE_EOF
+old_ifs=$IFS
+IFS=,
+for profile_name in $pref_profile; do
+  case "$profile_name" in
+    default|"")
+      ;;
+    move-to-rect-off)
+      echo 'user_pref("widget.wayland.use-move-to-rect", false);' >> "$profile/user.js"
+      ;;
+    popup-simple)
+      echo 'user_pref("widget.wayland.use-move-to-rect", false);' >> "$profile/user.js"
+      echo 'user_pref("widget.gtk.grab-pointer", 0);' >> "$profile/user.js"
+      echo 'user_pref("apz.popups.enabled", false);' >> "$profile/user.js"
+      echo 'user_pref("apz.popups_without_remote.enabled", false);' >> "$profile/user.js"
+      ;;
+    single-process)
+      echo 'user_pref("browser.tabs.remote.autostart", false);' >> "$profile/user.js"
+      echo 'user_pref("fission.autostart", false);' >> "$profile/user.js"
+      echo 'user_pref("dom.ipc.processCount", 1);' >> "$profile/user.js"
+      echo 'user_pref("dom.ipc.processCount.webIsolated", 1);' >> "$profile/user.js"
+      echo 'user_pref("dom.ipc.processPrelaunch.enabled", false);' >> "$profile/user.js"
+      ;;
+    simple-gfx)
+      echo 'user_pref("gfx.webrender.enable-item-cache", false);' >> "$profile/user.js"
+      echo 'user_pref("gfx.webrender.batched-texture-uploads", false);' >> "$profile/user.js"
+      echo 'user_pref("gfx.webrender.scissored-cache-clears.enabled", false);' >> "$profile/user.js"
+      echo 'user_pref("gfx.webrender.prefer-robustness", false);' >> "$profile/user.js"
+      echo 'user_pref("gfx.webrender.pbo-uploads", false);' >> "$profile/user.js"
+      ;;
+    no-apz)
+      echo 'user_pref("layers.async-pan-zoom.enabled", false);' >> "$profile/user.js"
+      echo 'user_pref("apz.popups.enabled", false);' >> "$profile/user.js"
+      echo 'user_pref("apz.popups_without_remote.enabled", false);' >> "$profile/user.js"
+      ;;
+    *)
+      echo "wfx-kiosk-init: unknown pref_profile=$profile_name" >/dev/console
+      ;;
+  esac
+done
+IFS=$old_ifs
 if [ "$software_webrender" = 1 ]; then
   export MOZ_WEBRENDER_SOFTWARE=1
   echo 'user_pref("gfx.webrender.software", true);' >> "$profile/user.js"
@@ -357,7 +428,7 @@ create_image() {
 
 write_manifest() {
   {
-    printf 'qemu_image_version=3\n'
+    printf 'qemu_image_version=%s\n' "$qemu_image_version"
     printf 'image=%s\n' "$image"
     printf 'kernel=%s\n' "$kernel"
     printf 'initramfs=%s\n' "$initramfs"

@@ -38,6 +38,7 @@ guest_full_damage=${WFX_QEMU_GUEST_FULL_DAMAGE:-}
 guest_scene_debug_damage=${WFX_QEMU_GUEST_SCENE_DEBUG_DAMAGE:-}
 guest_scene_disable_direct_scanout=${WFX_QEMU_GUEST_SCENE_DISABLE_DIRECT_SCANOUT:-}
 guest_scene_disable_visibility=${WFX_QEMU_GUEST_SCENE_DISABLE_VISIBILITY:-}
+guest_pref_profile=${WFX_QEMU_GUEST_PREF_PROFILE:-}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
@@ -54,7 +55,7 @@ default_image_is_current() {
   [ -f "$image" ] || return 1
   [ -f "$kernel" ] || return 1
   [ -f "$manifest" ] || return 1
-  grep -qx 'qemu_image_version=3' "$manifest" || return 1
+  grep -qx 'qemu_image_version=5' "$manifest" || return 1
   grep -qx 'init_profile=/run/wfx-profile' "$manifest" || return 1
   if [ "$guest_compositor" = weston ]; then
     grep -qx 'include_weston=1' "$manifest" || return 1
@@ -67,7 +68,11 @@ if uses_default_artifacts && ! default_image_is_current; then
     rebuild_env+=(WFX_QEMU_INCLUDE_WESTON=1)
     rebuild_env+=(WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-3072}")
   fi
-  env "${rebuild_env[@]}" "$script_dir/wfx-musl" qemu-image
+  if [ "${#rebuild_env[@]}" -gt 0 ]; then
+    env "${rebuild_env[@]}" "$script_dir/wfx-musl" qemu-image
+  else
+    "$script_dir/wfx-musl" qemu-image
+  fi
 fi
 
 [ -f "$image" ] || fail "missing $image; run docker/waterfox-musl/wfx-musl qemu-image"
@@ -201,7 +206,7 @@ args=(
   -m "$memory"
   -smp "$smp"
   -kernel "$kernel"
-  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}${guest_pref_profile:+ wfx.pref_profile=$guest_pref_profile}"
   -drive "file=$image,if=virtio,format=raw,snapshot=$snapshot"
   -serial "$serial"
   -monitor "$monitor"
