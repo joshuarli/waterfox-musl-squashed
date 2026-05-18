@@ -155,9 +155,12 @@ def all_configure_options():
 set_config("MOZ_CONFIGURE_OPTIONS", all_configure_options)
 
 
-@depends(target)
-def fold_libs(target):
-    return target.os in ("WINNT", "OSX", "iOS", "Android")
+option(env="WFX_FORCE_FOLD_LIBS", help="Force folded libraries for Waterfox musl experiments")
+
+
+@depends(target, "WFX_FORCE_FOLD_LIBS")
+def fold_libs(target, force):
+    return bool(force) or target.os in ("WINNT", "OSX", "iOS", "Android")
 
 
 set_config("MOZ_FOLD_LIBS", fold_libs)

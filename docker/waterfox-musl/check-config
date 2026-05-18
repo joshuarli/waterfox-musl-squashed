@@ -57,6 +57,10 @@ require_config MOZ_MIMALLOC_REPLACE 1
 require_config WFX_MIMALLOC_PREFIX /opt/wfx/build-deps/mimalloc
 require_config MOZ_LIBCLANG_PATH /usr/lib/llvm21/lib
 
+if [ "${WFX_EXPECT_FOLD_LIBS:-0}" = 1 ]; then
+  require_config MOZ_FOLD_LIBS 1
+fi
+
 reject_config_key MOZ_X11
 reject_config_key MOZ_ENABLE_DBUS
 reject_config_key NECKO_WIFI

@@ -1,0 +1,6 @@
+#!/bin/sh
+
+. /work/docker/waterfox-musl/mozconfig.release
+
+export WFX_FORCE_FOLD_LIBS=1
+mk_add_options MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release

@@ -9,6 +9,7 @@ platform=${WFX_DOCKER_PLATFORM:-linux/arm64}
 cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
 default_mozconfig=/work/docker/waterfox-musl/mozconfig.stage1
 release_mozconfig=/work/docker/waterfox-musl/mozconfig.release
+folded_release_mozconfig=/work/docker/waterfox-musl/mozconfig.folded-release
 
 usage() {
   cat <<'EOF'
@@ -30,6 +31,12 @@ commands:
   configure-release Configure the optimized release build.
   build-release     Build the optimized release build.
   package-release   Package the optimized release build.
+  configure-folded-release
+                    Configure the experimental folded-library release build.
+  build-folded-release
+                    Build the experimental folded-library release build.
+  package-folded-release
+                    Package the experimental folded-library release build.
   smoke-headless    Reserved for Docker headless Wayland/cage smoke.
   kiosk-compositor  Build the custom DRM/libinput cage compositor.
   qemu-image        Assemble the QEMU Alpine aarch64 kiosk rootfs image.
@@ -51,6 +58,9 @@ ensure_cache_dirs() {
     "$cache_dir/cargo" \
     "$cache_dir/obj-aarch64-unknown-linux-musl" \
     "$cache_dir/obj-aarch64-alpine-linux-musl" \
+    "$cache_dir/obj-aarch64-alpine-linux-musl/dist/system_wrappers" \
+    "$cache_dir/obj-aarch64-alpine-linux-musl-release/dist/system_wrappers" \
+    "$cache_dir/obj-aarch64-alpine-linux-musl-folded-release/dist/system_wrappers" \
     "$cache_dir/dist" \
     "$cache_dir/test-rootfs" \
     "$cache_dir/qemu"
@@ -137,6 +147,10 @@ refresh_qemu_image() {
 
 run_release_in_image() {
   WFX_MOZCONFIG=$release_mozconfig run_in_image "$@"
+}
+
+run_folded_release_in_image() {
+  WFX_MOZCONFIG=$folded_release_mozconfig run_in_image "$@"
 }
 
 edge_versions() {
@@ -261,6 +275,15 @@ case "$command" in
     ;;
   package-release)
     run_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_STAGE_ROOT=/cache/dist/release-root WFX_STAGE_ARTIFACT_SUFFIX=release /work/docker/waterfox-musl/package-stage1'
+    ;;
+  configure-folded-release)
+    run_folded_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_CONFIG_MODE=release WFX_EXPECT_FOLD_LIBS=1 /work/docker/waterfox-musl/check-config'
+    ;;
+  build-folded-release)
+    run_folded_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_CONFIG_MODE=release WFX_EXPECT_FOLD_LIBS=1 /work/docker/waterfox-musl/check-config && ./mach build'
+    ;;
+  package-folded-release)
+    run_folded_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_STAGE_ROOT=/cache/dist/folded-release-root WFX_STAGE_ARTIFACT_SUFFIX=folded-release WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-folded-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   test-compositor)
     run_in_image /work/docker/waterfox-musl/build-test-compositor build
