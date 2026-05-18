@@ -289,6 +289,73 @@ Tranche 6 status:
   whether the failure is stale partial damage, compositor GLES2, or virtio GL
   driver selection rather than Waterfox UI logic. `qemu-run` can override the
   guest renderer through `WFX_QEMU_GUEST_WLR_RENDERER`.
+- The QEMU image can optionally include Alpine's packaged Firefox for an A/B
+  diagnostic with the same QEMU, kernel, rootfs, cage, Wayland, GTK, Mesa, and
+  profile. Build that image with `WFX_QEMU_INCLUDE_ALPINE_FIREFOX=1` and run it
+  with `WFX_QEMU_GUEST_BROWSER=firefox`. If Alpine Firefox has the same
+  popup/text repaint failures, the restricted Waterfox build is unlikely to be
+  the primary cause; if it works, back out Waterfox build/runtime restrictions.
+- Alpine Firefox reproduced the same popup/text failures, and both browsers can
+  log `connector Virtual-1: Atomic commit failed: Resource busy`. The proof
+  image now sets `WLR_DRM_NO_ATOMIC=1` by default to force wlroots' legacy DRM
+  interface on QEMU virtio; override with `WFX_QEMU_GUEST_DRM_NO_ATOMIC=0` when
+  comparing against atomic KMS.
+- Clicking the hamburger with Software WebRender enabled can log
+  `RenderCompositorSWGL failed mapping default framebuffer, no dt`, followed by
+  `nsMenuPopupFrame` layout warnings. That means the popup surface exists but
+  Gecko failed before handing pixels to Wayland. The proof image no longer
+  forces Software WebRender by default; use
+  `WFX_QEMU_GUEST_SOFTWARE_WEBRENDER=1` to compare against the SWGL path.
+- With GL WebRender, the SWGL critical error is gone but the UI issue remains,
+  and Firefox can warn about pending Wayland buffers in
+  `WindowSurfaceWaylandMultiBuffer`. The proof image now forces full scene
+  rerendering and disables direct scanout plus visibility culling via
+  `WLR_SCENE_DEBUG_DAMAGE=rerender`, `WLR_SCENE_DISABLE_DIRECT_SCANOUT=1`, and
+  `WLR_SCENE_DISABLE_VISIBILITY=1`.
+- `qemu-run` now supports `WFX_QEMU_GPU=virtio-mmio`, using QEMU's
+  `virtio-gpu-device` instead of the default PCI `virtio-gpu-pci`. Use this to
+  check whether the stale popup/text rendering is tied to virtio-gpu's PCI
+  transport under HVF. Serial testing under direct kernel boot showed this mode
+  is currently not viable: wlroots sees zero DRM GPUs and exits before Cage can
+  launch the browser.
+- `qemu-run` now supports `WFX_QEMU_GPU_OPTS` for raw display-device option
+  experiments and `WFX_QEMU_VNC` for an optional VNC display. The next useful
+  split is `tcg + virtio` versus `hvf + virtio`; if `tcg + virtio` has the same
+  repaint failures, the virtio-gpu scanout path is suspect independent of HVF.
+  If only `hvf + virtio` fails, focus on QEMU/HVF virtio DMA/scanout behavior.
+- Manual testing showed `tcg + virtio` stalls at a black guest display with a
+  mouse pointer after the kiosk init banner, while `hvf + bochs + VNC` reaches
+  Waterfox serial output. `WFX_QEMU_DISPLAY=vnc` is now shorthand for
+  `-display none -vnc 127.0.0.1:1,password=off,ipv4=on,ipv6=off`; use it with
+  `WFX_QEMU_GPU=bochs` for the fast non-virtio display path. Apple's Screen
+  Sharing client prompts and then hangs against QEMU's no-auth VNC mode; use a
+  VNC viewer that supports RFB security type `None` for this authless path.
+- Direct RFB sampling showed both `hvf + bochs + VNC` and `tcg + bochs + VNC`
+  returning all-zero framebuffers, so VNC is not currently a useful visible
+  proof path. `qemu-run` now also supports `WFX_QEMU_GPU=stdvga`, `cirrus`,
+  `ramfb`, and `secondary-vga` for display-device diagnostics. Bounded serial
+  boots with `hvf + stdvga`, `hvf + bochs`, and `hvf + secondary-vga` reach
+  Waterfox, but Cocoa stays black for `stdvga` and `secondary-vga`. `cirrus`
+  under HVF trips QEMU's framebuffer page-alignment assertion and is blocked in
+  `qemu-run`. The fast visible Cocoa path is still `hvf + virtio`, which paints
+  but has the popup/text repaint bug.
+  `stdvga` under HVF needs the same `width * height * 4` page-alignment guard as
+  bochs; `qemu-run` now auto-aligns the default height to avoid QEMU's
+  `do_hv_vm_protect` assertion.
+- The QEMU image can optionally include Weston's DRM backend for a compositor
+  A/B against cage/wlroots. Rebuild with `WFX_QEMU_INCLUDE_WESTON=1
+  WFX_QEMU_IMAGE_MB=3072 docker/waterfox-musl/wfx-musl qemu-image`, then launch
+  with `WFX_QEMU_GUEST_COMPOSITOR=weston`. A bounded serial boot with
+  `hvf + virtio + Weston` reaches Waterfox under `kiosk-shell.so` using Weston's
+  pixman DRM renderer, so the next manual check is whether popup/text repainting
+  works in Cocoa on the same virtio display device.
+- Weston reproduces the same URL bar, popup menu, and context menu repaint
+  failures as cage/wlroots. The next browser-side diagnostic is a
+  QEMU-proof-only `MOZ_WAYLAND_FULL_DAMAGE=1` path: `RenderCompositorSWGL`
+  ignores partial dirty rects on GTK/Wayland, requests full SWGL renders, and
+  `WindowSurfaceWaylandMultiBuffer` damages/copies the full widget region. The
+  QEMU image exports this env var by default and can disable it with
+  `WFX_QEMU_GUEST_FULL_DAMAGE=0`.
 - The Cage patch keeps debugoptimized binaries but no longer lets `DEBUG` force
   wlroots debug logging at runtime. The repeated `Direct scan-out disabled by
   software cursor` serial spam is gone; `-D` remains the explicit Cage debug
@@ -328,11 +395,14 @@ Next resume actions:
 
 1. Rebuild the QEMU image, then manually verify whether URL bar typed text,
    hamburger popup menus, and right-click context menus repaint correctly in
-   the Cocoa QEMU window with the pixman compositor renderer.
-2. Decide whether to filter or fix remaining Gecko debug-build warning spam
+   the Cocoa QEMU window with full scene rerendering.
+2. Rebuild Waterfox, repackage, rebuild the QEMU image, then manually verify
+   `hvf + virtio + Cocoa` with the full-damage browser patch. If it works, keep
+   the patch gated behind `MOZ_WAYLAND_FULL_DAMAGE=1` for the QEMU proof.
+3. Decide whether to filter or fix remaining Gecko debug-build warning spam
    (`PuppetWidget without Tab`, bundled sidebar extension errors) or leave it
    as useful debug output.
-3. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
+4. Keep using Gecko and Rust debug/dev builds for iteration. Do not run release
    or optimized builds until the final packaging profile is reached.
 
 ### Known Relaxations And Followups

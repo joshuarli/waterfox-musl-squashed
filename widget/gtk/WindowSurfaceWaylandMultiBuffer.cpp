@@ -176,6 +176,16 @@ bool WindowSurfaceWaylandMB::MaybeUpdateWindowSize() {
   return false;
 }
 
+LayoutDeviceIntRegion WindowSurfaceWaylandMB::MaybeForceFullDamage(
+    const LayoutDeviceIntRegion& aInvalidRegion) const {
+  if (!PR_GetEnv("MOZ_WAYLAND_FULL_DAMAGE") || mWindowSize.width <= 0 ||
+      mWindowSize.height <= 0) {
+    return aInvalidRegion;
+  }
+  return LayoutDeviceIntRegion(
+      LayoutDeviceIntRect(0, 0, mWindowSize.width, mWindowSize.height));
+}
+
 already_AddRefed<DrawTarget> WindowSurfaceWaylandMB::Lock(
     const LayoutDeviceIntRegion& aInvalidRegion) {
   MutexAutoLock lock(mSurfaceLock);
@@ -207,6 +217,7 @@ already_AddRefed<DrawTarget> WindowSurfaceWaylandMB::Lock(
     }
     mAvailableBuffers.Clear();
   }
+  LayoutDeviceIntRegion invalidRegion = MaybeForceFullDamage(aInvalidRegion);
 
   if (!mInProgressBuffer) {
     if (mFrontBuffer && !mFrontBuffer->IsAttached()) {
@@ -217,7 +228,7 @@ already_AddRefed<DrawTarget> WindowSurfaceWaylandMB::Lock(
         return nullptr;
       }
       if (mFrontBuffer) {
-        HandlePartialUpdate(lock, aInvalidRegion);
+        HandlePartialUpdate(lock, invalidRegion);
         ReturnBufferToPool(lock, mFrontBuffer);
       }
     }
@@ -269,8 +280,9 @@ void WindowSurfaceWaylandMB::Commit(
 void WindowSurfaceWaylandMB::Commit(
     const MutexAutoLock& aProofOfLock,
     const LayoutDeviceIntRegion& aInvalidRegion) {
+  LayoutDeviceIntRegion invalidRegion = MaybeForceFullDamage(aInvalidRegion);
 #ifdef MOZ_LOGGING
-  gfx::IntRect invalidRect = aInvalidRegion.GetBounds().ToUnknownRect();
+  gfx::IntRect invalidRect = invalidRegion.GetBounds().ToUnknownRect();
   LOGWAYLAND(
       "WindowSurfaceWaylandMB::Commit [%p] damage rect [%d, %d] -> [%d x %d] "
       "Window [%d x %d]\n",
@@ -294,11 +306,12 @@ void WindowSurfaceWaylandMB::Commit(
         (void*)mWindow.get());
     if (!mCallbackRequested) {
       RefPtr<WindowSurfaceWaylandMB> self(this);
+      LayoutDeviceIntRegion queuedInvalidRegion = invalidRegion;
       waylandSurface->AddReadyToDrawCallbackLocked(
-          lock, [self, aInvalidRegion]() -> void {
+          lock, [self, queuedInvalidRegion]() -> void {
             MutexAutoLock lock(self->mSurfaceLock);
             if (!self->mFrameInProcess) {
-              self->Commit(lock, aInvalidRegion);
+              self->Commit(lock, queuedInvalidRegion);
             }
             self->mCallbackRequested = false;
           });
@@ -307,15 +320,14 @@ void WindowSurfaceWaylandMB::Commit(
     return;
   }
 
-  waylandSurface->InvalidateRegionLocked(lock,
-                                         aInvalidRegion.ToUnknownRegion());
+  waylandSurface->InvalidateRegionLocked(lock, invalidRegion.ToUnknownRegion());
   waylandSurface->AttachLocked(lock, mInProgressBuffer);
   waylandSurface->CommitLocked(lock, /* force commit */ true,
                                /* force flush */ true);
 
   mInProgressBuffer->ResetBufferAge();
   mFrontBuffer = mInProgressBuffer;
-  mFrontBufferInvalidRegion = aInvalidRegion;
+  mFrontBufferInvalidRegion = invalidRegion;
   mInProgressBuffer = nullptr;
 
   EnforcePoolSizeLimit(aProofOfLock);

@@ -10,6 +10,8 @@ kernel=$qemu_dir/vmlinuz-virt
 initramfs=$qemu_dir/initramfs-virt
 compositor=${WFX_KIOSK_COMPOSITOR:-/opt/wfx/kiosk-compositor}
 image_mb=${WFX_QEMU_IMAGE_MB:-2048}
+include_alpine_firefox=${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}
+include_weston=${WFX_QEMU_INCLUDE_WESTON:-0}
 
 fail() {
   printf 'wfx qemu image failed: %s\n' "$*" >&2
@@ -63,6 +65,22 @@ install_rootfs_packages() {
       seatd \
       shared-mime-info \
       wayland >/dev/null
+  if [ "$include_alpine_firefox" = 1 ]; then
+    apk --root "$rootfs" \
+      --arch aarch64 \
+      --keys-dir /etc/apk/keys \
+      --repositories-file /etc/apk/repositories \
+      --cache-dir /var/cache/apk \
+      add --no-progress --no-scripts firefox >/dev/null
+  fi
+  if [ "$include_weston" = 1 ]; then
+    apk --root "$rootfs" \
+      --arch aarch64 \
+      --keys-dir /etc/apk/keys \
+      --repositories-file /etc/apk/repositories \
+      --cache-dir /var/cache/apk \
+      add --no-progress --no-scripts weston weston-backend-drm >/dev/null
+  fi
   chroot "$rootfs" /bin/busybox --install -s
   mkdir -p "$rootfs/usr/lib/gdk-pixbuf-2.0/2.10.0"
   chroot "$rootfs" /usr/bin/gdk-pixbuf-query-loaders --update-cache >/dev/null 2>&1 || true
@@ -108,7 +126,7 @@ rm -f /run/.wfx-write-test
 
 export PATH=/opt/wfx/kiosk-compositor/bin:/usr/sbin:/usr/bin:/sbin:/bin
 mkdir -p /run/udev
-for module in evdev virtio_input virtio_net virtio-gpu bochs hid hid_generic usbhid xhci_hcd xhci_pci; do
+for module in evdev virtio_input virtio_net virtio-gpu bochs simpledrm qxl hid hid_generic usbhid xhci_hcd xhci_pci; do
   if ! modprobe "$module" >/dev/console 2>&1; then
     echo "wfx-kiosk-init: failed to load module $module" >/dev/console
   fi
@@ -130,7 +148,6 @@ export HOME=/run/wfx-home
 export XDG_CACHE_HOME=/run/wfx-cache
 export WAYLAND_DISPLAY=wayland-0
 export MOZ_ENABLE_WAYLAND=1
-export MOZ_WEBRENDER_SOFTWARE=1
 export GDK_BACKEND=wayland
 export NO_AT_BRIDGE=1
 export LIBGL_ALWAYS_SOFTWARE=1
@@ -145,14 +162,56 @@ export MOZ_DISABLE_GPU_SANDBOX=1
 export MOZ_DISABLE_RDD_SANDBOX=1
 export MOZ_DISABLE_SOCKET_PROCESS_SANDBOX=1
 export MALLOC_OPTIONS=R
+export MOZ_WAYLAND_FULL_DAMAGE=1
 export WLR_BACKENDS=drm,libinput
+export WLR_DRM_NO_ATOMIC=1
 export WLR_RENDERER=pixman
 export WLR_RENDERER_ALLOW_SOFTWARE=1
+export WLR_SCENE_DEBUG_DAMAGE=rerender
+export WLR_SCENE_DISABLE_DIRECT_SCANOUT=1
+export WLR_SCENE_DISABLE_VISIBILITY=1
 export SEATD_SOCK=/run/seatd.sock
+browser=/usr/bin/waterfox
+browser_ld_library_path=$LD_LIBRARY_PATH
+compositor=cage
+software_webrender=0
+full_damage=1
 for arg in $(cat /proc/cmdline); do
   case "$arg" in
+    wfx.browser=firefox)
+      browser=/usr/bin/firefox
+      browser_ld_library_path=/opt/wfx/kiosk-compositor/lib
+      ;;
+    wfx.browser=waterfox)
+      browser=/usr/bin/waterfox
+      browser_ld_library_path=$LD_LIBRARY_PATH
+      ;;
+    wfx.compositor=weston)
+      compositor=weston
+      ;;
+    wfx.compositor=cage)
+      compositor=cage
+      ;;
     wfx.wlr_renderer=*)
       export WLR_RENDERER=${arg#*=}
+      ;;
+    wfx.drm_no_atomic=*)
+      export WLR_DRM_NO_ATOMIC=${arg#*=}
+      ;;
+    wfx.scene_debug_damage=*)
+      export WLR_SCENE_DEBUG_DAMAGE=${arg#*=}
+      ;;
+    wfx.scene_disable_direct_scanout=*)
+      export WLR_SCENE_DISABLE_DIRECT_SCANOUT=${arg#*=}
+      ;;
+    wfx.scene_disable_visibility=*)
+      export WLR_SCENE_DISABLE_VISIBILITY=${arg#*=}
+      ;;
+    wfx.software_webrender=*)
+      software_webrender=${arg#*=}
+      ;;
+    wfx.full_damage=*)
+      full_damage=${arg#*=}
       ;;
     wfx.gallium_driver=*)
       export GALLIUM_DRIVER=${arg#*=}
@@ -166,6 +225,14 @@ profile=/run/wfx-profile
 
 echo "wfx-kiosk-init: profile=$profile" >/dev/console
 echo "wfx-kiosk-init: renderer=$WLR_RENDERER" >/dev/console
+echo "wfx-kiosk-init: drm_no_atomic=$WLR_DRM_NO_ATOMIC" >/dev/console
+echo "wfx-kiosk-init: scene_debug_damage=$WLR_SCENE_DEBUG_DAMAGE" >/dev/console
+echo "wfx-kiosk-init: scene_disable_direct_scanout=$WLR_SCENE_DISABLE_DIRECT_SCANOUT" >/dev/console
+echo "wfx-kiosk-init: scene_disable_visibility=$WLR_SCENE_DISABLE_VISIBILITY" >/dev/console
+echo "wfx-kiosk-init: software_webrender=$software_webrender" >/dev/console
+echo "wfx-kiosk-init: full_damage=$full_damage" >/dev/console
+echo "wfx-kiosk-init: browser=$browser" >/dev/console
+echo "wfx-kiosk-init: compositor=$compositor" >/dev/console
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME" "$XDG_CACHE_HOME"
 chmod 0700 "$XDG_RUNTIME_DIR"
 rm -rf "$profile"
@@ -187,7 +254,6 @@ user_pref("gfx.webrender.allow-partial-present-buffer-age", false);
 user_pref("gfx.webrender.force-partial-present", false);
 user_pref("gfx.webrender.max-partial-present-rects", 0);
 user_pref("gfx.webrender.reject-software-driver", false);
-user_pref("gfx.webrender.software", true);
 user_pref("widget.dmabuf.enabled", false);
 user_pref("network.captive-portal-service.enabled", false);
 user_pref("network.connectivity-service.enabled", false);
@@ -204,15 +270,39 @@ user_pref("waterfox.blocker.enabled", false);
 user_pref("waterfox.blocker.remoteResourcesEnabled", false);
 user_pref("waterfox.blocker.ui.enabled", false);
 PROFILE_EOF
+if [ "$software_webrender" = 1 ]; then
+  export MOZ_WEBRENDER_SOFTWARE=1
+  echo 'user_pref("gfx.webrender.software", true);' >> "$profile/user.js"
+else
+  unset MOZ_WEBRENDER_SOFTWARE
+  echo 'user_pref("gfx.webrender.software", false);' >> "$profile/user.js"
+fi
+if [ "$full_damage" = 1 ]; then
+  export MOZ_WAYLAND_FULL_DAMAGE=1
+else
+  unset MOZ_WAYLAND_FULL_DAMAGE
+fi
 
 seatd -u root -g root -l error >/dev/console 2>&1 &
 sleep 1
 
-cage -- /usr/bin/waterfox -no-remote -profile "$profile" about:blank >/dev/console 2>&1 &
-cage_pid=$!
+case "$compositor" in
+  weston)
+    if ! command -v weston >/dev/null 2>&1; then
+      echo "wfx-kiosk-init: weston is not installed; rebuild with WFX_QEMU_INCLUDE_WESTON=1" >/dev/console
+      exit 1
+    fi
+    weston --backend=drm --renderer=pixman --shell=kiosk-shell.so --socket="$WAYLAND_DISPLAY" --idle-time=0 --no-config --continue-without-input --log=/dev/console -- env LD_LIBRARY_PATH="$browser_ld_library_path" "$browser" -no-remote -profile "$profile" about:blank >/dev/console 2>&1 &
+    compositor_pid=$!
+    ;;
+  *)
+    cage -- env LD_LIBRARY_PATH="$browser_ld_library_path" "$browser" -no-remote -profile "$profile" about:blank >/dev/console 2>&1 &
+    compositor_pid=$!
+    ;;
+esac
 status=0
-wait "$cage_pid" || status=$?
-echo "wfx-kiosk-init: cage exited with status $status" >/dev/console
+wait "$compositor_pid" || status=$?
+echo "wfx-kiosk-init: $compositor exited with status $status" >/dev/console
 poweroff -f >/dev/console 2>&1 || true
 while :; do
   sleep 3600
@@ -267,12 +357,15 @@ create_image() {
 
 write_manifest() {
   {
-    printf 'qemu_image_version=2\n'
+    printf 'qemu_image_version=3\n'
     printf 'image=%s\n' "$image"
     printf 'kernel=%s\n' "$kernel"
     printf 'initramfs=%s\n' "$initramfs"
     printf 'rootfs=%s\n' "$rootfs"
     printf 'image_mb=%s\n' "$image_mb"
+    printf 'init_profile=/run/wfx-profile\n'
+    printf 'include_alpine_firefox=%s\n' "$include_alpine_firefox"
+    printf 'include_weston=%s\n' "$include_weston"
     printf 'created_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
     printf 'waterfox_stage=%s\n' "$stage"
     printf 'compositor=%s\n' "$compositor"

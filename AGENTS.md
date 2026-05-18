@@ -289,6 +289,31 @@ Current QEMU functional followup:
   to the pixman renderer to test stale-damage, compositor GLES2, and virtio
   GL-driver paths. Use `WFX_QEMU_GUEST_WLR_RENDERER=gles2` to restore the GLES2
   compositor path without editing the image.
+- Alpine Firefox can be included as a diagnostic control by building the image
+  with `WFX_QEMU_INCLUDE_ALPINE_FIREFOX=1` and launching with
+  `WFX_QEMU_GUEST_BROWSER=firefox`. This is intentionally diagnostic-only; it
+  compares the same QEMU/cage/Wayland/GTK/Mesa/profile stack against Alpine's
+  full Firefox package.
+- Alpine Firefox reproduced the same UI repaint failures as Waterfox, so avoid
+  blaming the Waterfox feature set without new evidence. Both browsers can log
+  `connector Virtual-1: Atomic commit failed: Resource busy`; the QEMU proof
+  image now defaults `WLR_DRM_NO_ATOMIC=1` to force wlroots' legacy DRM backend.
+  Use `WFX_QEMU_GUEST_DRM_NO_ATOMIC=0` to compare with atomic KMS.
+- Software WebRender/SWGL is no longer forced by default. A hamburger click
+  under SWGL can log `RenderCompositorSWGL failed mapping default framebuffer,
+  no dt`, which matches an empty popup surface. Use
+  `WFX_QEMU_GUEST_SOFTWARE_WEBRENDER=1` only when intentionally comparing the
+  SWGL path against GL WebRender on Mesa llvmpipe.
+- With GL WebRender, pending-buffer warnings from
+  `WindowSurfaceWaylandMultiBuffer` became the main signal. The QEMU proof
+  image now defaults `WLR_SCENE_DEBUG_DAMAGE=rerender`,
+  `WLR_SCENE_DISABLE_DIRECT_SCANOUT=1`, and
+  `WLR_SCENE_DISABLE_VISIBILITY=1` to force full scene repainting and bypass
+  wlroots scene optimizations while debugging.
+- `WFX_QEMU_GPU=virtio-mmio` selects QEMU's `virtio-gpu-device` instead of the
+  default PCI `virtio-gpu-pci`. Serial testing showed this currently fails
+  before browser launch in direct-kernel boot because wlroots sees zero DRM
+  GPUs.
 
 If the Cocoa window is blank, check the launch line first. `hvf` should use
 `gpu=virtio`; `tcg` should use `gpu=bochs`. `WFX_QEMU_ACCEL=tcg
@@ -296,6 +321,46 @@ WFX_QEMU_GPU=bochs` visibly renders the browser UI, while `hvf + bochs +
 Cocoa` can leave the host window black even though QEMU `screendump` captures a
 valid Waterfox framebuffer. Treat `hvf + bochs` as a diagnostic-only path and
 set `WFX_QEMU_ALLOW_HVF_BOCHS=1` only when intentionally reproducing it.
+
+For the current stale popup/text rendering issue, compare `tcg + virtio` with
+`hvf + virtio` before changing Gecko. If both fail, suspect QEMU virtio-gpu
+scanout regardless of accelerator. If only HVF fails, suspect QEMU/HVF virtio
+DMA or scanout behavior. `WFX_QEMU_GPU_OPTS` appends raw options to the display
+device for narrow experiments, and `WFX_QEMU_VNC` adds a VNC display for
+checking a framebuffer without relying on Cocoa.
+
+Latest diagnostic result: `tcg + virtio` stalls at a black guest display with a
+mouse pointer after the kiosk init banner, so virtio-gpu is suspect independent
+of HVF. `hvf + bochs + VNC` reaches Waterfox serial output. Use
+`WFX_QEMU_ACCEL=hvf WFX_QEMU_GPU=bochs WFX_QEMU_DISPLAY=vnc` for the fast
+non-virtio display check. The shorthand listens on localhost only and uses
+QEMU's `password=off` VNC option. A raw RFB handshake advertises security type
+`None`, but Apple's Screen Sharing client prompts and hangs anyway; use a VNC
+viewer that supports no-auth QEMU VNC.
+
+Direct RFB sampling showed `hvf + bochs + VNC` and `tcg + bochs + VNC`
+returning all-zero framebuffers, so VNC is not useful for the current visible
+proof. `WFX_QEMU_GPU=stdvga` uses QEMU's legacy `VGA` device with the bochs DRM
+stack; a bounded serial boot with `hvf + stdvga` reaches Waterfox. The next
+manual check is `hvf + stdvga + Cocoa`. Like bochs, stdvga under HVF needs
+`width * height * 4` page alignment; `qemu-run` auto-aligns the default height
+to avoid QEMU's `do_hv_vm_protect` assertion.
+
+Weston compositor A/B: rebuild the image with `WFX_QEMU_INCLUDE_WESTON=1
+WFX_QEMU_IMAGE_MB=3072 docker/waterfox-musl/wfx-musl qemu-image`, then run with
+`WFX_QEMU_GUEST_COMPOSITOR=weston`. A bounded serial boot with
+`hvf + virtio + Weston` reaches Waterfox under Weston's DRM backend,
+`kiosk-shell.so`, and pixman renderer. This is diagnostic-only for now because
+Weston pulls extra dependencies, but it cleanly separates a cage/wlroots issue
+from a broader virtio/Firefox Wayland issue.
+
+Weston reproduces the same URL bar, popup menu, and context menu repaint
+failures as cage/wlroots. The active browser-side experiment is
+`MOZ_WAYLAND_FULL_DAMAGE=1`: `RenderCompositorSWGL` ignores partial dirty rects
+on GTK/Wayland and requests full renders, while
+`WindowSurfaceWaylandMultiBuffer` damages/copies the full widget region. The
+QEMU image exports it by default; set `WFX_QEMU_GUEST_FULL_DAMAGE=0` to compare
+against the old partial-damage behavior.
 
 On `hvf + virtio`, keep `virtio_gpu: driver missing` and
 `webrender::device::gl` texture-crop warnings in the suspect set while menus or
@@ -348,7 +413,11 @@ For QEMU command debugging, environment knobs are:
 - `WFX_QEMU_DISPLAY`, default `cocoa`
 - `WFX_QEMU_ACCEL`, default `hvf`
 - `WFX_QEMU_GPU`, default `virtio` with `hvf` and `bochs` with `tcg`; accepted
-  values are `virtio` and `bochs`
+  values are `virtio`, `virtio-mmio`, `bochs`, `stdvga`, `cirrus`, `ramfb`,
+  and `secondary-vga`
+- `WFX_QEMU_GPU_OPTS`, optional comma-separated raw options appended to the
+  selected QEMU display device
+- `WFX_QEMU_VNC`, optional QEMU VNC endpoint, for example `:1`
 - `WFX_QEMU_MEMORY`, default `4096`
 - `WFX_QEMU_SMP`, default `4`
 - `WFX_QEMU_INPUT`, default `virtio`; accepted values are `virtio`, `usb`,
@@ -358,10 +427,30 @@ For QEMU command debugging, environment knobs are:
 - `WFX_QEMU_SERIAL`, default `stdio`
 - `WFX_QEMU_MONITOR`, default `none`
 - `WFX_QEMU_IMAGE`, `WFX_QEMU_KERNEL`, `WFX_QEMU_INITRAMFS`
+- `WFX_QEMU_GUEST_BROWSER`, optional guest browser, `waterfox` or `firefox`
+- `WFX_QEMU_GUEST_COMPOSITOR`, optional guest compositor, `cage` or `weston`
 - `WFX_QEMU_GUEST_WLR_RENDERER`, optional guest override for `WLR_RENDERER`
+- `WFX_QEMU_GUEST_DRM_NO_ATOMIC`, optional guest override for
+  `WLR_DRM_NO_ATOMIC`
+- `WFX_QEMU_GUEST_SOFTWARE_WEBRENDER`, optional guest override; `1` forces
+  Software WebRender/SWGL, default is GL WebRender on Mesa llvmpipe
+- `WFX_QEMU_GUEST_FULL_DAMAGE`, optional guest override; `0` disables
+  `MOZ_WAYLAND_FULL_DAMAGE`
+- `WFX_QEMU_GUEST_SCENE_DEBUG_DAMAGE`, optional guest override for
+  `WLR_SCENE_DEBUG_DAMAGE`
+- `WFX_QEMU_GUEST_SCENE_DISABLE_DIRECT_SCANOUT`, optional guest override for
+  `WLR_SCENE_DISABLE_DIRECT_SCANOUT`
+- `WFX_QEMU_GUEST_SCENE_DISABLE_VISIBILITY`, optional guest override for
+  `WLR_SCENE_DISABLE_VISIBILITY`
 - `WFX_QEMU_GUEST_GALLIUM_DRIVER`, optional guest override for `GALLIUM_DRIVER`
 - `WFX_QEMU_GUEST_MESA_LOADER`, optional guest override for
   `MESA_LOADER_DRIVER_OVERRIDE`
+- `WFX_QEMU_INCLUDE_ALPINE_FIREFOX=1`, build-time image option for the Firefox
+  A/B diagnostic
+- `WFX_QEMU_INCLUDE_WESTON=1`, build-time image option for the Weston
+  compositor A/B diagnostic
+- `WFX_QEMU_IMAGE_MB`, build-time image size override; use a larger value when
+  adding Alpine Firefox
 
 ## When Updating The Plan
 

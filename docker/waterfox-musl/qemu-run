@@ -22,11 +22,21 @@ width=${WFX_QEMU_WIDTH:-1600}
 height=${WFX_QEMU_HEIGHT:-1000}
 network=${WFX_QEMU_NETWORK:-user}
 gpu=${WFX_QEMU_GPU:-}
+gpu_opts=${WFX_QEMU_GPU_OPTS:-}
 snapshot=${WFX_QEMU_SNAPSHOT:-on}
 allow_hvf_bochs=${WFX_QEMU_ALLOW_HVF_BOCHS:-0}
+vnc=${WFX_QEMU_VNC:-}
 guest_wlr_renderer=${WFX_QEMU_GUEST_WLR_RENDERER:-}
 guest_gallium_driver=${WFX_QEMU_GUEST_GALLIUM_DRIVER:-}
 guest_mesa_loader=${WFX_QEMU_GUEST_MESA_LOADER:-}
+guest_browser=${WFX_QEMU_GUEST_BROWSER:-}
+guest_compositor=${WFX_QEMU_GUEST_COMPOSITOR:-}
+guest_drm_no_atomic=${WFX_QEMU_GUEST_DRM_NO_ATOMIC:-}
+guest_software_webrender=${WFX_QEMU_GUEST_SOFTWARE_WEBRENDER:-}
+guest_full_damage=${WFX_QEMU_GUEST_FULL_DAMAGE:-}
+guest_scene_debug_damage=${WFX_QEMU_GUEST_SCENE_DEBUG_DAMAGE:-}
+guest_scene_disable_direct_scanout=${WFX_QEMU_GUEST_SCENE_DISABLE_DIRECT_SCANOUT:-}
+guest_scene_disable_visibility=${WFX_QEMU_GUEST_SCENE_DISABLE_VISIBILITY:-}
 
 fail() {
   printf 'wfx qemu run failed: %s\n' "$*" >&2
@@ -43,11 +53,20 @@ default_image_is_current() {
   [ -f "$image" ] || return 1
   [ -f "$kernel" ] || return 1
   [ -f "$manifest" ] || return 1
-  grep -qx 'qemu_image_version=2' "$manifest" || return 1
+  grep -qx 'qemu_image_version=3' "$manifest" || return 1
+  grep -qx 'init_profile=/run/wfx-profile' "$manifest" || return 1
+  if [ "$guest_compositor" = weston ]; then
+    grep -qx 'include_weston=1' "$manifest" || return 1
+  fi
 }
 
 if uses_default_artifacts && ! default_image_is_current; then
-  "$script_dir/wfx-musl" qemu-image
+  rebuild_env=()
+  if [ "$guest_compositor" = weston ]; then
+    rebuild_env+=(WFX_QEMU_INCLUDE_WESTON=1)
+    rebuild_env+=(WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-3072}")
+  fi
+  env "${rebuild_env[@]}" "$script_dir/wfx-musl" qemu-image
 fi
 
 [ -f "$image" ] || fail "missing $image; run docker/waterfox-musl/wfx-musl qemu-image"
@@ -59,6 +78,22 @@ case "$snapshot" in
     ;;
   *)
     fail "unknown WFX_QEMU_SNAPSHOT=$snapshot; expected on or off"
+    ;;
+esac
+
+case "$guest_browser" in
+  ""|waterfox|firefox)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_GUEST_BROWSER=$guest_browser; expected waterfox or firefox"
+    ;;
+esac
+
+case "$guest_compositor" in
+  ""|cage|weston)
+    ;;
+  *)
+    fail "unknown WFX_QEMU_GUEST_COMPOSITOR=$guest_compositor; expected cage or weston"
     ;;
 esac
 
@@ -76,8 +111,42 @@ if [ -z "$cpu" ]; then
   esac
 fi
 
-if [ "$display" = cocoa ]; then
-  display=cocoa,zoom-to-fit=on,show-cursor=on
+case "$display" in
+  cocoa)
+    display=cocoa,zoom-to-fit=on,show-cursor=on
+    ;;
+  vnc)
+    display=none
+    vnc=${vnc:-127.0.0.1:1,password=off,ipv4=on,ipv6=off}
+    ;;
+  vnc=*)
+    vnc=${display#vnc=}
+    case "$vnc" in
+      *,password=*|*,password-secret=*)
+        ;;
+      *)
+        vnc=$vnc,password=off
+        ;;
+    esac
+    display=none
+    ;;
+esac
+
+if [ -n "$vnc" ]; then
+  case "$vnc" in
+    *,password=*|*,password-secret=*)
+      ;;
+    *)
+      vnc=$vnc,password=off
+      ;;
+  esac
+  case "$vnc" in
+    *,ipv4=*|*,ipv6=*)
+      ;;
+    *)
+      vnc=$vnc,ipv4=on,ipv6=off
+      ;;
+  esac
 fi
 
 if [ -z "$gpu" ]; then
@@ -101,10 +170,16 @@ gcd() {
   printf '%s\n' "$a"
 }
 
-if [ "$gpu" = bochs ] && [ "$accel" = hvf ]; then
-  if [ "$allow_hvf_bochs" != 1 ] && [ "$display" != none ]; then
-    fail "WFX_QEMU_GPU=bochs with WFX_QEMU_ACCEL=hvf can leave Cocoa black; use WFX_QEMU_GPU=virtio or set WFX_QEMU_ACCEL=tcg"
-  fi
+if [ "$gpu" = bochs ] && [ "$accel" = hvf ] && [ "$allow_hvf_bochs" != 1 ] && [ "$display" != none ]; then
+  fail "WFX_QEMU_GPU=bochs with WFX_QEMU_ACCEL=hvf can leave Cocoa black; use WFX_QEMU_GPU=virtio or set WFX_QEMU_ACCEL=tcg"
+fi
+
+if [ "$gpu" = cirrus ] && [ "$accel" = hvf ]; then
+  fail "WFX_QEMU_GPU=cirrus with WFX_QEMU_ACCEL=hvf trips QEMU's framebuffer page-alignment assertion"
+fi
+
+case "$gpu:$accel" in
+  bochs:hvf|stdvga:hvf|secondary-vga:hvf)
   page_size=$(getconf PAGESIZE 2>/dev/null || printf '4096')
   framebuffer_stride=$((width * 4))
   if [ $(((framebuffer_stride * height) % page_size)) -ne 0 ]; then
@@ -112,11 +187,12 @@ if [ "$gpu" = bochs ] && [ "$accel" = hvf ]; then
     height_step=$((page_size / divisor))
     aligned_height=$((((height + height_step - 1) / height_step) * height_step))
     if [ -n "${WFX_QEMU_HEIGHT+x}" ]; then
-      fail "WFX_QEMU_GPU=bochs with WFX_QEMU_ACCEL=hvf requires width*height*4 to be page-aligned; try WFX_QEMU_HEIGHT=$aligned_height"
+      fail "WFX_QEMU_GPU=$gpu with WFX_QEMU_ACCEL=hvf requires width*height*4 to be page-aligned; try WFX_QEMU_HEIGHT=$aligned_height"
     fi
     height=$aligned_height
   fi
-fi
+    ;;
+esac
 
 args=(
   -machine "virt,accel=$accel"
@@ -124,22 +200,50 @@ args=(
   -m "$memory"
   -smp "$smp"
   -kernel "$kernel"
-  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}"
   -drive "file=$image,if=virtio,format=raw,snapshot=$snapshot"
   -serial "$serial"
   -monitor "$monitor"
   -display "$display"
 )
 
+if [ -n "$vnc" ]; then
+  args+=(-vnc "$vnc")
+fi
+
+with_gpu_opts() {
+  local device=$1
+  if [ -n "$gpu_opts" ]; then
+    printf '%s,%s\n' "$device" "$gpu_opts"
+  else
+    printf '%s\n' "$device"
+  fi
+}
+
 case "$gpu" in
   virtio)
-    args+=(-device "virtio-gpu-pci,xres=$width,yres=$height")
+    args+=(-device "$(with_gpu_opts "virtio-gpu-pci,xres=$width,yres=$height")")
+    ;;
+  virtio-mmio)
+    args+=(-device "$(with_gpu_opts "virtio-gpu-device,xres=$width,yres=$height")")
     ;;
   bochs)
-    args+=(-device "bochs-display,xres=$width,yres=$height")
+    args+=(-device "$(with_gpu_opts "bochs-display,xres=$width,yres=$height")")
+    ;;
+  stdvga)
+    args+=(-device "$(with_gpu_opts "VGA,xres=$width,yres=$height,vgamem_mb=64")")
+    ;;
+  cirrus)
+    args+=(-device "$(with_gpu_opts "cirrus-vga,vgamem_mb=16")")
+    ;;
+  ramfb)
+    args+=(-device "$(with_gpu_opts "ramfb")")
+    ;;
+  secondary-vga)
+    args+=(-device "$(with_gpu_opts "secondary-vga,xres=$width,yres=$height,vgamem_mb=64")")
     ;;
   *)
-    fail "unknown WFX_QEMU_GPU=$gpu; expected virtio or bochs"
+    fail "unknown WFX_QEMU_GPU=$gpu; expected virtio, virtio-mmio, bochs, stdvga, cirrus, ramfb, or secondary-vga"
     ;;
 esac
 
@@ -192,7 +296,7 @@ if [ -f "$initramfs" ]; then
   args=(-initrd "$initramfs" "${args[@]}")
 fi
 
-printf 'wfx qemu: image=%s snapshot=%s accel=%s cpu=%s gpu=%s display=%s\n' "$image" "$snapshot" "$accel" "$cpu" "$gpu" "$display" >&2
+printf 'wfx qemu: image=%s snapshot=%s accel=%s cpu=%s gpu=%s display=%s vnc=%s\n' "$image" "$snapshot" "$accel" "$cpu" "$gpu" "$display" "${vnc:-none}" >&2
 "$qemu" "${args[@]}" &
 qemu_pid=$!
 

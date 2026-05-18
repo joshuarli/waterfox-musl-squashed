@@ -41,13 +41,19 @@ ac_add_options --disable-elf-hack
 ac_add_options --disable-packed-relative-relocs
 ac_add_options --disable-dmd
 ac_add_options --disable-geckodriver
+ac_add_options --disable-gecko-profiler
 ac_add_options --disable-profiling
+ac_add_options --disable-system-extension-dirs
 ac_add_options --disable-tests
+ac_add_options --disable-universalchardet
 ac_add_options --disable-updater
 ac_add_options --disable-waterfox-blocker
+ac_add_options --disable-webdriver
+ac_add_options --disable-zipwriter
 
 ac_add_options --disable-dbus
 ac_add_options --disable-necko-wifi
+ac_add_options --disable-negotiateauth
 ac_add_options --disable-webrtc
 ac_add_options --disable-printing
 ac_add_options --disable-synth-speechd

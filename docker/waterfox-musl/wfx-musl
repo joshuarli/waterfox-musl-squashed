@@ -87,6 +87,9 @@ run_in_image() {
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
     --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
+    --env WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-2048}" \
+    --env WFX_QEMU_INCLUDE_ALPINE_FIREFOX="${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}" \
+    --env WFX_QEMU_INCLUDE_WESTON="${WFX_QEMU_INCLUDE_WESTON:-0}" \
     "$image" \
     "$@"
 }
@@ -116,6 +119,8 @@ run_shell() {
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
     --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
+    --env WFX_QEMU_IMAGE_MB="${WFX_QEMU_IMAGE_MB:-2048}" \
+    --env WFX_QEMU_INCLUDE_ALPINE_FIREFOX="${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}" \
     "$image" \
     bash
 }

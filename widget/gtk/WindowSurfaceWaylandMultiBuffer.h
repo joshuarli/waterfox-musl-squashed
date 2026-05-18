@@ -54,6 +54,8 @@ class WindowSurfaceWaylandMB : public WindowSurface {
   void HandlePartialUpdate(const MutexAutoLock& aProofOfLock,
                            const LayoutDeviceIntRegion& aInvalidRegion);
   void IncrementBufferAge(const MutexAutoLock& aProofOfLock);
+  LayoutDeviceIntRegion MaybeForceFullDamage(
+      const LayoutDeviceIntRegion& aInvalidRegion) const;
   // Return true if window size was updated.
   bool MaybeUpdateWindowSize();
 

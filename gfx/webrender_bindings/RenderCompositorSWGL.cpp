@@ -8,6 +8,7 @@
 
 #include "mozilla/gfx/Logging.h"
 #include "mozilla/widget/CompositorWidget.h"
+#include "prenv.h"
 
 #ifdef MOZ_WIDGET_GTK
 #  include "mozilla/WidgetUtilsGtk.h"
@@ -20,6 +21,12 @@ namespace wr {
 
 extern LazyLogModule gRenderThreadLog;
 #define LOG(...) MOZ_LOG(gRenderThreadLog, LogLevel::Debug, (__VA_ARGS__))
+
+#ifdef MOZ_WIDGET_GTK
+static bool ForceWaylandFullDamage() {
+  return widget::GdkIsWaylandDisplay() && PR_GetEnv("MOZ_WAYLAND_FULL_DAMAGE");
+}
+#endif
 
 /* static */
 UniquePtr<RenderCompositor> RenderCompositorSWGL::Create(
@@ -172,6 +179,11 @@ void RenderCompositorSWGL::StartCompositing(
     // Reset the region to the widget bounds
     mDirtyRegion = LayoutDeviceIntRect(LayoutDeviceIntPoint(), GetBufferSize());
   }
+#ifdef MOZ_WIDGET_GTK
+  if (ForceWaylandFullDamage()) {
+    mDirtyRegion = LayoutDeviceIntRect(LayoutDeviceIntPoint(), GetBufferSize());
+  } else
+#endif
   if (aNumDirtyRects) {
     // Install the dirty rects into the bounds of the existing region
     auto bounds = mDirtyRegion.GetBounds();
@@ -268,6 +280,9 @@ bool RenderCompositorSWGL::RequestFullRender() {
   return true;
 #endif
 #ifdef MOZ_WIDGET_GTK
+  if (ForceWaylandFullDamage()) {
+    return true;
+  }
   // We're requested to do full render after Resume() on Wayland.
   if (mRequestFullRender) {
     mRequestFullRender = false;
