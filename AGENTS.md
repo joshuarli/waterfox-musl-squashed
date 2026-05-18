@@ -74,7 +74,7 @@ Current important local edits in this squashed tree:
   - defaults to virtio keyboard/tablet input; `WFX_QEMU_INPUT=usb` or `both`
     are available for comparison
   - defaults to QEMU user networking; `WFX_QEMU_NETWORK=none` disables it
-  - defaults the virtio GPU mode to 1600x1000 via `WFX_QEMU_WIDTH` and
+  - defaults the virtio GPU mode to 1024x768 via `WFX_QEMU_WIDTH` and
     `WFX_QEMU_HEIGHT`
   - traps host `INT`/`TERM` and terminates the QEMU process
 - `docker/waterfox-musl/wfx-musl`
@@ -329,6 +329,15 @@ DMA or scanout behavior. `WFX_QEMU_GPU_OPTS` appends raw options to the display
 device for narrow experiments, and `WFX_QEMU_VNC` adds a VNC display for
 checking a framebuffer without relying on Cocoa.
 
+Use `docker/waterfox-musl/qemu-repro-hamburger` as the fast visible regression
+loop for this bug. It boots the snapshot, waits for Waterfox, clicks the toolbar
+hamburger through QMP, writes full-frame PPM screenshots, and also writes a
+right-edge strip (`after-hamburger-right64.ppm`) that captures the known bad
+blank vertical menu surface. The harness records `before_black`/`after_black`
+with luma stats in `repro.txt` and exits nonzero on effectively black frames by
+default; set `WFX_REPRO_FAIL_ON_BLACK=0` only when intentionally collecting a
+black-screen run.
+
 Latest diagnostic result: `tcg + virtio` stalls at a black guest display with a
 mouse pointer after the kiosk init banner, so virtio-gpu is suspect independent
 of HVF. `hvf + bochs + VNC` reaches Waterfox serial output. Use
@@ -422,8 +431,8 @@ For QEMU command debugging, environment knobs are:
 - `WFX_QEMU_SMP`, default `4`
 - `WFX_QEMU_INPUT`, default `virtio`; accepted values are `virtio`, `usb`,
   `both`, and `none`
-- `WFX_QEMU_WIDTH`, default `1600`
-- `WFX_QEMU_HEIGHT`, default `1000`
+- `WFX_QEMU_WIDTH`, default `1024`
+- `WFX_QEMU_HEIGHT`, default `768`
 - `WFX_QEMU_SERIAL`, default `stdio`
 - `WFX_QEMU_MONITOR`, default `none`
 - `WFX_QEMU_IMAGE`, `WFX_QEMU_KERNEL`, `WFX_QEMU_INITRAMFS`

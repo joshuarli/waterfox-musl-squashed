@@ -1,0 +1,262 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+cache_dir=${WFX_CACHE_DIR:-$repo_root/.wfx-cache}
+qemu_dir=$cache_dir/qemu
+run_id=${WFX_REPRO_ID:-$(date -u '+%Y%m%dT%H%M%SZ')}
+out_dir=${WFX_REPRO_OUT_DIR:-$qemu_dir/repro-hamburger-$run_id}
+qmp_sock=${WFX_REPRO_QMP_SOCK:-/tmp/wfx-repro-qmp-$$.sock}
+serial_log=$out_dir/serial.log
+runner_log=$out_dir/qemu-run.log
+width=${WFX_QEMU_WIDTH:-1024}
+height=${WFX_QEMU_HEIGHT:-768}
+click_x=${WFX_REPRO_CLICK_X:-$((width - 22))}
+click_y=${WFX_REPRO_CLICK_Y:-49}
+click_mode=${WFX_REPRO_CLICK_MODE:-scaled}
+boot_wait=${WFX_REPRO_BOOT_WAIT:-35}
+after_click_wait=${WFX_REPRO_AFTER_CLICK_WAIT:-10}
+strip_width=${WFX_REPRO_STRIP_WIDTH:-64}
+black_max_luma=${WFX_REPRO_BLACK_MAX_LUMA:-8}
+black_min_nonblack_ratio=${WFX_REPRO_BLACK_MIN_NONBLACK_RATIO:-0.02}
+fail_on_black=${WFX_REPRO_FAIL_ON_BLACK:-1}
+
+mkdir -p "$out_dir"
+rm -f "$qmp_sock"
+
+cleanup() {
+  if [ -n "${runner_pid:-}" ] && kill -0 "$runner_pid" 2>/dev/null; then
+    kill -TERM "$runner_pid" 2>/dev/null || true
+    wait "$runner_pid" 2>/dev/null || true
+  fi
+  rm -f "$qmp_sock"
+}
+trap cleanup EXIT INT TERM
+
+env \
+  WFX_QEMU_ACCEL="${WFX_QEMU_ACCEL:-hvf}" \
+  WFX_QEMU_GPU="${WFX_QEMU_GPU:-virtio}" \
+  WFX_QEMU_WIDTH="$width" \
+  WFX_QEMU_HEIGHT="$height" \
+  WFX_QEMU_DISPLAY="${WFX_QEMU_DISPLAY:-cocoa,zoom-to-fit=on,show-cursor=on}" \
+  WFX_QEMU_INPUT="${WFX_QEMU_INPUT:-virtio}" \
+  WFX_QEMU_SERIAL="file:$serial_log" \
+  WFX_QEMU_QMP="unix:$qmp_sock,server=on,wait=off" \
+  "$script_dir/qemu-run" >"$runner_log" 2>&1 &
+runner_pid=$!
+
+python3 - "$qmp_sock" "$serial_log" "$out_dir" "$width" "$height" "$click_x" "$click_y" "$click_mode" "$boot_wait" "$after_click_wait" "$strip_width" "$black_max_luma" "$black_min_nonblack_ratio" "$fail_on_black" <<'PY'
+import json
+import os
+import socket
+import sys
+import time
+
+qmp_sock, serial_log, out_dir = sys.argv[1:4]
+width, height = int(sys.argv[4]), int(sys.argv[5])
+click_x, click_y = int(sys.argv[6]), int(sys.argv[7])
+click_mode = sys.argv[8]
+boot_wait = float(sys.argv[9])
+after_click_wait = float(sys.argv[10])
+strip_width = int(sys.argv[11])
+black_max_luma = float(sys.argv[12])
+black_min_nonblack_ratio = float(sys.argv[13])
+fail_on_black = sys.argv[14] not in ("0", "false", "False", "no", "No")
+
+
+def wait_for(path, predicate, timeout, interval=0.25):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", errors="replace") as f:
+                    data = f.read()
+                if predicate(data):
+                    return data
+            except OSError:
+                pass
+        time.sleep(interval)
+    raise TimeoutError(path)
+
+
+def qmp_read(sock):
+    line = b""
+    while not line.endswith(b"\n"):
+        chunk = sock.recv(1)
+        if not chunk:
+            raise EOFError("QMP socket closed")
+        line += chunk
+    return json.loads(line.decode("utf-8"))
+
+
+def qmp_cmd(sock, execute, arguments=None):
+    payload = {"execute": execute}
+    if arguments is not None:
+        payload["arguments"] = arguments
+    sock.sendall((json.dumps(payload) + "\n").encode("utf-8"))
+    while True:
+        msg = qmp_read(sock)
+        if "return" in msg:
+            return msg["return"]
+        if "error" in msg:
+            raise RuntimeError(f"{execute}: {msg['error']}")
+
+
+def read_token(f):
+    token = bytearray()
+    while True:
+        ch = f.read(1)
+        if not ch:
+            break
+        if ch == b"#":
+            f.readline()
+            continue
+        if ch.isspace():
+            if token:
+                break
+            continue
+        token += ch
+    return bytes(token)
+
+
+def read_ppm(src):
+    with open(src, "rb") as f:
+        magic = read_token(f)
+        image_width = int(read_token(f))
+        image_height = int(read_token(f))
+        maxval = int(read_token(f))
+        if magic != b"P6":
+            raise RuntimeError(f"{src}: expected P6 PPM, got {magic!r}")
+        if maxval != 255:
+            raise RuntimeError(f"{src}: expected maxval 255, got {maxval}")
+        row_stride = image_width * 3
+        data = f.read()
+    expected = row_stride * image_height
+    if len(data) != expected:
+        raise RuntimeError(f"{src}: expected {expected} pixel bytes, got {len(data)}")
+    return image_width, image_height, data
+
+
+def crop_ppm_right(src, dst, crop_width):
+    image_width, image_height, data = read_ppm(src)
+    row_stride = image_width * 3
+    crop_width = max(1, min(crop_width, image_width))
+    start = (image_width - crop_width) * 3
+    with open(dst, "wb") as f:
+        f.write(f"P6\n{crop_width} {image_height}\n255\n".encode("ascii"))
+        for row in range(image_height):
+            offset = row * row_stride
+            f.write(data[offset + start : offset + row_stride])
+
+
+def ppm_stats(src):
+    image_width, image_height, data = read_ppm(src)
+    pixels = image_width * image_height
+    luma_total = 0
+    nonblack = 0
+    max_channel = 0
+    for i in range(0, len(data), 3):
+        r, g, b = data[i], data[i + 1], data[i + 2]
+        max_channel = max(max_channel, r, g, b)
+        if r > 16 or g > 16 or b > 16:
+            nonblack += 1
+        luma_total += 0.2126 * r + 0.7152 * g + 0.0722 * b
+    mean_luma = luma_total / max(pixels, 1)
+    nonblack_ratio = nonblack / max(pixels, 1)
+    is_black = mean_luma <= black_max_luma and nonblack_ratio <= black_min_nonblack_ratio
+    return {
+        "width": image_width,
+        "height": image_height,
+        "mean_luma": mean_luma,
+        "nonblack_ratio": nonblack_ratio,
+        "max_channel": max_channel,
+        "black": is_black,
+    }
+
+
+def write_report(path, values, stats):
+    with open(path, "w") as f:
+        for key, value in values.items():
+            f.write(f"{key}={value}\n")
+        f.write(f"black_max_luma={black_max_luma:g}\n")
+        f.write(f"black_min_nonblack_ratio={black_min_nonblack_ratio:g}\n")
+        f.write(f"fail_on_black={int(fail_on_black)}\n")
+        for name, stat in stats.items():
+            f.write(f"{name}_black={int(stat['black'])}\n")
+            f.write(f"{name}_mean_luma={stat['mean_luma']:.3f}\n")
+            f.write(f"{name}_nonblack_ratio={stat['nonblack_ratio']:.6f}\n")
+            f.write(f"{name}_max_channel={stat['max_channel']}\n")
+
+
+deadline = time.monotonic() + 30
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+while True:
+    try:
+        sock.connect(qmp_sock)
+        break
+    except OSError:
+        if time.monotonic() > deadline:
+            raise
+        time.sleep(0.1)
+
+qmp_read(sock)
+qmp_cmd(sock, "qmp_capabilities")
+
+wait_for(serial_log, lambda s: "wfx-kiosk-init: browser=" in s, 90)
+time.sleep(boot_wait)
+
+before = os.path.join(out_dir, "before.ppm")
+after = os.path.join(out_dir, "after-hamburger.ppm")
+before_strip = os.path.join(out_dir, f"before-right{strip_width}.ppm")
+after_strip = os.path.join(out_dir, f"after-hamburger-right{strip_width}.ppm")
+report = os.path.join(out_dir, "repro.txt")
+report_values = {
+    "width": width,
+    "height": height,
+    "click_x": click_x,
+    "click_y": click_y,
+    "click_mode": click_mode,
+    "before": before,
+    "after": after,
+    "strip_width": strip_width,
+    "before_strip": before_strip,
+    "after_strip": after_strip,
+    "serial_log": serial_log,
+}
+qmp_cmd(sock, "screendump", {"filename": before})
+crop_ppm_right(before, before_strip, strip_width)
+stats = {"before": ppm_stats(before)}
+if stats["before"]["black"]:
+    write_report(report, report_values, stats)
+    if fail_on_black:
+        raise SystemExit("before screendump is effectively black")
+
+if click_mode == "scaled":
+    x = round(click_x * 32767 / max(width - 1, 1))
+    y = round(click_y * 32767 / max(height - 1, 1))
+elif click_mode == "pixel":
+    x, y = click_x, click_y
+else:
+    raise SystemExit(f"unknown WFX_REPRO_CLICK_MODE={click_mode}; expected scaled or pixel")
+
+events = [
+    {"type": "abs", "data": {"axis": "x", "value": x}},
+    {"type": "abs", "data": {"axis": "y", "value": y}},
+    {"type": "btn", "data": {"button": "left", "down": True}},
+    {"type": "btn", "data": {"button": "left", "down": False}},
+]
+qmp_cmd(sock, "input-send-event", {"events": events})
+time.sleep(after_click_wait)
+qmp_cmd(sock, "screendump", {"filename": after})
+crop_ppm_right(after, after_strip, strip_width)
+stats["after"] = ppm_stats(after)
+
+report_values["qmp_x"] = x
+report_values["qmp_y"] = y
+write_report(report, report_values, stats)
+if stats["after"]["black"] and fail_on_black:
+    raise SystemExit("after screendump is effectively black")
+PY
+
+printf 'wfx hamburger repro output: %s\n' "$out_dir"

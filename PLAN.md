@@ -270,8 +270,8 @@ Tranche 6 status:
   but never attaches the input backend. After switching to `drm,libinput`,
   serial boot verifies wlroots opens both event devices and adds the QEMU Virtio
   Keyboard and QEMU Virtio Tablet.
-- `qemu-run` defaults the virtio GPU mode to 1600x1000. Override with
-  `WFX_QEMU_WIDTH` and `WFX_QEMU_HEIGHT`; serial boot verifies 1600x1000 is the
+- `qemu-run` defaults the virtio GPU mode to 1024x768. Override with
+  `WFX_QEMU_WIDTH` and `WFX_QEMU_HEIGHT`; serial boot verifies 1024x768 is the
   preferred mode.
 - `qemu-run` now selects GPU defaults by accelerator: `virtio` for HVF and
   `bochs` for TCG. Manual testing showed `WFX_QEMU_ACCEL=tcg
@@ -306,6 +306,11 @@ Tranche 6 status:
   Gecko failed before handing pixels to Wayland. The proof image no longer
   forces Software WebRender by default; use
   `WFX_QEMU_GUEST_SOFTWARE_WEBRENDER=1` to compare against the SWGL path.
+- `docker/waterfox-musl/qemu-repro-hamburger` is now the automated repro for
+  the popup rendering bug. It boots QEMU, clicks the toolbar hamburger through
+  QMP, saves full-frame screenshots plus a rightmost 64px strip, and records
+  black-screen detection stats in `repro.txt`. By default it exits nonzero on
+  effectively black frames so failed display paths are easy to back out of.
 - With GL WebRender, the SWGL critical error is gone but the UI issue remains,
   and Firefox can warn about pending Wayland buffers in
   `WindowSurfaceWaylandMultiBuffer`. The proof image now forces full scene
@@ -1033,7 +1038,7 @@ QEMU target:
 - virtio GPU for HVF; Bochs display is kept as the TCG/debug fallback
 - virtio keyboard/tablet by default, with USB HID input available through
   `WFX_QEMU_INPUT=usb`
-- default 1600x1000 virtio GPU mode, adjustable with `WFX_QEMU_WIDTH` and
+- default 1024x768 virtio GPU mode, adjustable with `WFX_QEMU_WIDTH` and
   `WFX_QEMU_HEIGHT`
 - serial console log
 - Cocoa display for manual runs

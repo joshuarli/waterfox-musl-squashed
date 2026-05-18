@@ -17,9 +17,10 @@ smp=${WFX_QEMU_SMP:-4}
 display=${WFX_QEMU_DISPLAY:-cocoa,zoom-to-fit=on,show-cursor=on}
 serial=${WFX_QEMU_SERIAL:-stdio}
 monitor=${WFX_QEMU_MONITOR:-none}
+qmp=${WFX_QEMU_QMP:-}
 input=${WFX_QEMU_INPUT:-virtio}
-width=${WFX_QEMU_WIDTH:-1600}
-height=${WFX_QEMU_HEIGHT:-1000}
+width=${WFX_QEMU_WIDTH:-1024}
+height=${WFX_QEMU_HEIGHT:-768}
 network=${WFX_QEMU_NETWORK:-user}
 gpu=${WFX_QEMU_GPU:-}
 gpu_opts=${WFX_QEMU_GPU_OPTS:-}
@@ -209,6 +210,10 @@ args=(
 
 if [ -n "$vnc" ]; then
   args+=(-vnc "$vnc")
+fi
+
+if [ -n "$qmp" ]; then
+  args+=(-qmp "$qmp")
 fi
 
 with_gpu_opts() {
