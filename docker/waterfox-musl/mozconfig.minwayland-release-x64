@@ -55,7 +55,6 @@ ac_add_options --disable-waterfox-blocker
 ac_add_options --disable-webdriver
 ac_add_options --disable-zipwriter
 
-ac_add_options --disable-dbus
 ac_add_options --disable-necko-wifi
 ac_add_options --disable-negotiateauth
 ac_add_options --disable-webrtc

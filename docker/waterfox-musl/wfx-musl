@@ -143,6 +143,7 @@ run_in_image() {
     --workdir /work \
     --env MOZCONFIG="$container_mozconfig" \
     --env WFX_SKIP_MACH_OPTIONAL=1 \
+    --env DISABLE_TELEMETRY=1 \
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
     --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \
@@ -178,6 +179,7 @@ run_shell() {
     --workdir /work \
     --env MOZCONFIG="$container_mozconfig" \
     --env WFX_SKIP_MACH_OPTIONAL=1 \
+    --env DISABLE_TELEMETRY=1 \
     --env WFX_JOBS="${WFX_JOBS:-4}" \
     --env WFX_CARGO_JOBS="${WFX_CARGO_JOBS:-4}" \
     --env WFX_FORCE_REBUILD="${WFX_FORCE_REBUILD:-0}" \

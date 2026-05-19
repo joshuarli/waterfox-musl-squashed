@@ -423,7 +423,7 @@ class MachSiteManager:
 
     def attempt_populate_optional_packages(self):
         if self._site_packages_source != SitePackagesSource.VENV:
-            pass
+            return
 
         if os.environ.get("WFX_SKIP_MACH_OPTIONAL"):
             return
@@ -1521,7 +1521,10 @@ def _create_venv_with_pthfile(
                 str(req.requirement) for req in requirements.pypi_requirements
             ]
             target_venv.pip_install(requirements_list)
-        target_venv.install_optional_packages(requirements.pypi_optional_requirements)
+        if not os.environ.get("WFX_SKIP_MACH_OPTIONAL"):
+            target_venv.install_optional_packages(
+                requirements.pypi_optional_requirements
+            )
 
     metadata.write(is_finalized=True)
 
