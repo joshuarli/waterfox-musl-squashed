@@ -1,0 +1,8 @@
+#!/bin/sh
+
+. /work/docker/waterfox-musl/mozconfig.minwayland
+
+export LDFLAGS="$LDFLAGS -static-libstdc++ -static-libgcc"
+export WFX_ALLOW_STATIC_LIBSTDCXX=1
+
+mk_add_options MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded

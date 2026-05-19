@@ -18,6 +18,12 @@ check_and_add_flag("-fno-aligned-new", compiler=cxx_compiler)
 
 # Detect static linkage of libstdc++
 # ==============================================================
+option(
+    env="WFX_ALLOW_STATIC_LIBSTDCXX",
+    help="Allow Waterfox musl experiments to statically link libstdc++",
+)
+
+
 @depends(
     cxx_compiler,
     extra_toolchain_flags,
@@ -76,9 +82,10 @@ def link_libstdcxx_statically(
             )
 
 
-@depends(when=link_libstdcxx_statically)
-def check_libstdcxx_linkage():
-    die("Firefox does not support linking statically with libstdc++")
+@depends(link_libstdcxx_statically, "WFX_ALLOW_STATIC_LIBSTDCXX")
+def check_libstdcxx_linkage(link_static, allow_static_libstdcxx):
+    if link_static and not allow_static_libstdcxx:
+        die("Firefox does not support linking statically with libstdc++")
 
 
 check_and_add_flag(

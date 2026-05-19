@@ -9,6 +9,7 @@ mode=${WFX_CONFIG_MODE:-debug}
 expect_webdriver=${WFX_CONFIG_WEBDRIVER:-0}
 expect_widget_toolkit=${WFX_CONFIG_WIDGET_TOOLKIT:-}
 expect_mimalloc_prefix=${WFX_CONFIG_MIMALLOC_PREFIX:-/opt/wfx/build-deps/mimalloc}
+expect_static_gcc_runtime=${WFX_EXPECT_STATIC_GCC_RUNTIME:-0}
 
 fail() {
   printf 'wfx config check failed: %s\n' "$*" >&2
@@ -76,6 +77,21 @@ fi
 if [ "${WFX_EXPECT_FOLD_LIBS:-0}" = 1 ]; then
   require_config MOZ_FOLD_LIBS 1
 fi
+
+case "$expect_static_gcc_runtime" in
+  1)
+    grep -Eq -- "-static-libstdc\\+\\+" "$config" ||
+      fail "static libstdc++ linker flag was not configured"
+    grep -Eq -- "-static-libgcc" "$config" ||
+      fail "static libgcc linker flag was not configured"
+    require_config_empty MOZ_FOLD_LIBS
+    ;;
+  0)
+    ;;
+  *)
+    fail "unknown WFX_EXPECT_STATIC_GCC_RUNTIME=$expect_static_gcc_runtime; expected 0 or 1"
+    ;;
+esac
 
 reject_config_key MOZ_X11
 reject_config_key MOZ_ENABLE_DBUS
