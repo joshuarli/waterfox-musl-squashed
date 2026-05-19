@@ -19,6 +19,7 @@ EXPORTS.mozilla.widget += [
 
 UNIFIED_SOURCES += [
     "GfxInfo.cpp",
+    "MinWaylandClipboard.cpp",
     "MinWaylandDisplay.cpp",
     "MinWaylandServices.cpp",
     "MinWaylandWindow.cpp",

@@ -29,6 +29,9 @@ class MinWaylandDisplay final {
   wl_compositor* Compositor() const { return mCompositor; }
   wl_shm* Shm() const { return mShm; }
   xdg_wm_base* XdgWmBase() const { return mXdgWmBase; }
+  wl_data_device_manager* DataDeviceManager() const {
+    return mDataDeviceManager;
+  }
   wl_seat* Seat() const { return mSeat; }
   uint32_t LastInputSerial() const { return mLastInputSerial; }
 
@@ -91,6 +94,7 @@ class MinWaylandDisplay final {
   wl_compositor* mCompositor = nullptr;
   wl_shm* mShm = nullptr;
   xdg_wm_base* mXdgWmBase = nullptr;
+  wl_data_device_manager* mDataDeviceManager = nullptr;
   wl_seat* mSeat = nullptr;
   wl_pointer* mPointer = nullptr;
   wl_keyboard* mKeyboard = nullptr;

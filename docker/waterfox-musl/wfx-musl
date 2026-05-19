@@ -279,7 +279,7 @@ case "$command" in
     run_in_image /work/docker/waterfox-musl/build-sysroot smoke
     ;;
   check)
-    run_in_image sh -euc '/work/docker/waterfox-musl/build-sysroot scan && if [ -d /cache/dist/stage1-root/opt/waterfox ]; then /work/docker/waterfox-musl/check-waterfox-deps; fi'
+    run_in_image sh -euc '/work/docker/waterfox-musl/build-sysroot scan && if [ -d /cache/dist/minwayland-root/opt/waterfox ]; then /work/docker/waterfox-musl/check-waterfox-deps; fi'
     ;;
   waterfox-deps)
     run_in_image /work/docker/waterfox-musl/check-waterfox-deps
@@ -297,13 +297,13 @@ case "$command" in
     run_minwayland_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && ./mach build'
     ;;
   package-minwayland)
-    run_minwayland_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-minwayland WFX_STAGE_ROOT=/cache/dist/minwayland-root WFX_STAGE_ARTIFACT_SUFFIX=minwayland WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-minwayland-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
+    run_minwayland_in_image sh -euc './mach package && /work/docker/waterfox-musl/package-stage1'
     ;;
   build)
     run_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package)
-    run_in_image sh -euc './mach package && /work/docker/waterfox-musl/package-stage1'
+    run_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl WFX_STAGE_ROOT=/cache/dist/stage1-root WFX_STAGE_ARTIFACT_SUFFIX=debug WFX_WATERFOX_ALLOW_GTK=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   configure-alsa)
     run_alsa_debug_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_CONFIG_MODE=alsa-debug /work/docker/waterfox-musl/check-config'
@@ -312,7 +312,7 @@ case "$command" in
     run_alsa_debug_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_CONFIG_MODE=alsa-debug /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package-alsa)
-    run_alsa_debug_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_STAGE_ROOT=/cache/dist/alsa-debug-root WFX_STAGE_ARTIFACT_SUFFIX=alsa-debug WFX_PACKAGE_ALSA=1 WFX_WATERFOX_ALLOW_ALSA=1 /work/docker/waterfox-musl/package-stage1'
+    run_alsa_debug_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-alsa-debug WFX_STAGE_ROOT=/cache/dist/alsa-debug-root WFX_STAGE_ARTIFACT_SUFFIX=alsa-debug WFX_PACKAGE_ALSA=1 WFX_WATERFOX_ALLOW_ALSA=1 WFX_WATERFOX_ALLOW_GTK=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   configure-release)
     run_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_CONFIG_MODE=release /work/docker/waterfox-musl/check-config'
@@ -321,7 +321,7 @@ case "$command" in
     run_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_CONFIG_MODE=release /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package-release)
-    run_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_STAGE_ROOT=/cache/dist/release-root WFX_STAGE_ARTIFACT_SUFFIX=release /work/docker/waterfox-musl/package-stage1'
+    run_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_STAGE_ROOT=/cache/dist/release-root WFX_STAGE_ARTIFACT_SUFFIX=release WFX_WATERFOX_ALLOW_GTK=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   configure-folded-release)
     run_folded_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_CONFIG_MODE=release WFX_EXPECT_FOLD_LIBS=1 /work/docker/waterfox-musl/check-config'
@@ -330,7 +330,7 @@ case "$command" in
     run_folded_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_CONFIG_MODE=release WFX_EXPECT_FOLD_LIBS=1 /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package-folded-release)
-    run_folded_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_STAGE_ROOT=/cache/dist/folded-release-root WFX_STAGE_ARTIFACT_SUFFIX=folded-release WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-folded-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
+    run_folded_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_STAGE_ROOT=/cache/dist/folded-release-root WFX_STAGE_ARTIFACT_SUFFIX=folded-release WFX_WATERFOX_ALLOW_GTK=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-folded-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   test-compositor)
     run_in_image /work/docker/waterfox-musl/build-test-compositor build
@@ -345,7 +345,7 @@ case "$command" in
     refresh_qemu_image
     ;;
   qemu-image-minwayland)
-    run_in_image sh -euc 'WFX_STAGE_ROOT=/cache/dist/minwayland-root /work/docker/waterfox-musl/build-kiosk-compositor build && WFX_STAGE_ROOT=/cache/dist/minwayland-root /work/docker/waterfox-musl/qemu-image build'
+    run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
     ;;
   qemu-run)
     "$script_dir/qemu-run"

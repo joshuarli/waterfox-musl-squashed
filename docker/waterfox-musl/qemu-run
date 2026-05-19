@@ -40,6 +40,8 @@ guest_scene_disable_direct_scanout=${WFX_QEMU_GUEST_SCENE_DISABLE_DIRECT_SCANOUT
 guest_scene_disable_visibility=${WFX_QEMU_GUEST_SCENE_DISABLE_VISIBILITY:-}
 guest_pref_profile=${WFX_QEMU_GUEST_PREF_PROFILE:-}
 guest_moz_log=${WFX_QEMU_GUEST_MOZ_LOG:-}
+guest_clipboard_seed=${WFX_QEMU_GUEST_CLIPBOARD_SEED:-}
+guest_clipboard_probe_after=${WFX_QEMU_GUEST_CLIPBOARD_PROBE_AFTER:-}
 audio=${WFX_QEMU_AUDIO:-none}
 audio_file=${WFX_QEMU_AUDIO_FILE:-$qemu_dir/audio-test/waterfox-audio.wav}
 guest_audio_test=${WFX_QEMU_GUEST_AUDIO_TEST:-0}
@@ -59,7 +61,7 @@ default_image_is_current() {
   [ -f "$image" ] || return 1
   [ -f "$kernel" ] || return 1
   [ -f "$manifest" ] || return 1
-  grep -qx 'qemu_image_version=11' "$manifest" || return 1
+  grep -qx 'qemu_image_version=12' "$manifest" || return 1
   grep -qx 'init_profile=/run/wfx-profile' "$manifest" || return 1
   if [ "$guest_compositor" = weston ]; then
     grep -qx 'include_weston=1' "$manifest" || return 1
@@ -238,7 +240,7 @@ args=(
   -m "$memory"
   -smp "$smp"
   -kernel "$kernel"
-  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}${guest_pref_profile:+ wfx.pref_profile=$guest_pref_profile}${guest_moz_log:+ wfx.moz_log=$guest_moz_log} wfx.audio_test=$guest_audio_test wfx.audio=$audio_kernel"
+  -append "console=ttyAMA0 root=/dev/vda rw rootfstype=ext4 init=/usr/local/bin/wfx-kiosk-init loglevel=4${guest_browser:+ wfx.browser=$guest_browser}${guest_compositor:+ wfx.compositor=$guest_compositor}${guest_wlr_renderer:+ wfx.wlr_renderer=$guest_wlr_renderer}${guest_drm_no_atomic:+ wfx.drm_no_atomic=$guest_drm_no_atomic}${guest_scene_debug_damage:+ wfx.scene_debug_damage=$guest_scene_debug_damage}${guest_scene_disable_direct_scanout:+ wfx.scene_disable_direct_scanout=$guest_scene_disable_direct_scanout}${guest_scene_disable_visibility:+ wfx.scene_disable_visibility=$guest_scene_disable_visibility}${guest_software_webrender:+ wfx.software_webrender=$guest_software_webrender}${guest_full_damage:+ wfx.full_damage=$guest_full_damage}${guest_gallium_driver:+ wfx.gallium_driver=$guest_gallium_driver}${guest_mesa_loader:+ wfx.mesa_loader=$guest_mesa_loader}${guest_pref_profile:+ wfx.pref_profile=$guest_pref_profile}${guest_moz_log:+ wfx.moz_log=$guest_moz_log}${guest_clipboard_seed:+ wfx.clipboard_seed=$guest_clipboard_seed}${guest_clipboard_probe_after:+ wfx.clipboard_probe_after=$guest_clipboard_probe_after} wfx.audio_test=$guest_audio_test wfx.audio=$audio_kernel"
   -drive "file=$image,if=virtio,format=raw,snapshot=$snapshot"
   -serial "$serial"
   -monitor "$monitor"

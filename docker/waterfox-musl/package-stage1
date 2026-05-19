@@ -3,15 +3,15 @@ set -euo pipefail
 
 repo_root=${WFX_REPO_ROOT:-/work}
 cache=${WFX_CACHE:-/cache}
-objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl}
+objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl-minwayland}
 sysroot=${WFX_RUNTIME_SYSROOT:-/opt/wfx/sysroot}
 dist=$cache/dist
-stage=${WFX_STAGE_ROOT:-$dist/stage1-root}
+stage=${WFX_STAGE_ROOT:-$dist/minwayland-root}
 package=${WFX_WATERFOX_PACKAGE:-}
 version=${WFX_STAGE1_VERSION:-}
 date_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
-artifact_suffix=${WFX_STAGE_ARTIFACT_SUFFIX:-debug}
+artifact_suffix=${WFX_STAGE_ARTIFACT_SUFFIX:-minwayland}
 
 mkdir -p "$dist"
 

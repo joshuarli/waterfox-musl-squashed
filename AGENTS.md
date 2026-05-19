@@ -1,9 +1,10 @@
 # Agent Handoff: Waterfox Musl Build
 
 This repository is a Waterfox checkout adapted to produce arm64 Linux musl
-artifacts for Laputa. The first milestone is a narrow, visible browser proof:
-Waterfox starts on `about:blank` under a minimal Wayland-only kiosk environment,
-built with Alpine, clang/LLVM, mold, and musl, with no X11 and no audio stack.
+artifacts for Laputa. The current primary proof is the `minwayland` browser
+profile: Waterfox runs on a small Wayland-only widget backend under the custom
+seatd + cage/wlroots QEMU kiosk environment, without GTK/GDK/GLib/GIO/Pango in
+the staged Waterfox runtime closure.
 
 Alpine's Firefox package and patches are available at
 `/Users/josh/d/kominka/aports/community/firefox/` and remain the first reference
@@ -18,48 +19,52 @@ when adapting musl or packaging fixes.
   runtime libraries. Do not select GCC/G++ as the compiler/linker.
 - Alpine may install GCC runtime packages such as `libgcc` or `libstdc++` as
   dormant transitive runtime dependencies.
-- Build-time dependencies may come from Alpine. The custom `/opt/wfx/sysroot`
-  is the runtime closure used for packaging and smoke/runtime verification; it
-  is not a mandatory SDK for `./mach build`.
-- Build Waterfox against a Wayland-only GTK3 stack.
-- Do not ship X11, XCB, Xwayland, GLX, Vulkan, audio, DBus, portal,
-  notification, secret-service, speechd, or cups libraries in the stage 1
+- The active stage 1 browser direction is `cairo-minwayland`, not GTK.
+- Do not ship X11, XCB, Xwayland, GLX, Vulkan, DBus, portals, notification,
+  secret-service, speechd, cups, or dynamic `libmimalloc.so` in the stage 1
   browser runtime.
-- Stage 1 has no audio. PipeWire/audio support must be a separate future
-  profile and artifact.
+- Do not ship GTK/GDK/GLib/GIO/Pango/ATK in the minwayland Waterfox runtime.
+- Minwayland remains no-audio by default. ALSA debug commands exist as an
+  explicit diagnostic profile; do not merge audio into the stage 1 artifact
+  unless the task explicitly targets that profile.
 - Mimalloc v3 is linked through the browser allocator path statically. The final
   Waterfox artifact must not need `libmimalloc.so`.
-- Debug/dev builds are the default iteration path. Release builds use the
-  separate `mozconfig.release` and release objdir only when explicitly requested.
+- Debug/dev builds are the default iteration path. Release builds use separate
+  release mozconfigs and objdirs only when explicitly requested.
 - Do not run pre-commit hooks. Do not push.
 
 ## Status
 
-- Docker toolchain image, wrapper, cache layout, and stage 1 mozconfigs are in
+- Docker toolchain image, wrapper, cache layout, and minwayland mozconfig are in
   place.
-- The custom Wayland/GTK runtime sysroot builds and is used for packaged
-  runtime checks.
-- Gecko configure work is in place: Wayland-only GTK, no audio, WebMIDI/midir
-  disabled, clang/mold selected, mimalloc v3 static replacement, musl patches,
-  and configure checks.
-- Debug Waterfox build and package pass.
-- Docker headless Wayland smoke passes and verifies an `xdg_toplevel`.
-- QEMU boots to seatd + custom cage/wlroots + Waterfox. Cocoa QEMU visibly
-  renders Waterfox, repeat boots no longer hit profile read-only panics, host
-  terminal `Ctrl-C` terminates QEMU cleanly, keyboard/mouse input work, and QEMU
-  user networking works.
-- WaterfoxBlocker is excluded from the musl build with `--disable-waterfox-blocker`;
-  staged artifact scans find no blocker files or registration strings.
-- The old URL bar/menu rendering failure is fixed. Root cause was zero-sized
-  chrome fonts from invalid GTK look-and-feel text scale; the durable fix is in
-  `widget/gtk/nsLookAndFeel.cpp`.
-- Release build and package pass in the separate release objdir, producing a
-  staged release artifact and manifest with dependency scans.
-- The experimental folded-library release builds and packages, but it is not a
-  usable release path yet: QEMU boots and browser chrome works, while loading
-  normal websites fails with the in-content "Try Again" network error page.
-  Debug and normal release QEMU images can load `google.com`, so the regression
-  is specific to the folded release profile.
+- `docker/waterfox-musl/mozconfig.minwayland` configures
+  `--enable-default-toolkit=cairo-minwayland`, producing
+  `MOZ_WIDGET_TOOLKIT=minwayland`.
+- `configure-minwayland`, `build-minwayland`, and `package-minwayland` pass for
+  the debug/dev path.
+- The minwayland staged artifact scans cleanly against
+  `docker/waterfox-musl/waterfox-minwayland-allowed-needed.txt`.
+- QEMU boots to seatd + custom cage/wlroots + minwayland Waterfox. Cocoa QEMU
+  visibly renders Waterfox, keyboard and mouse input work, QEMU user networking
+  works, and repeat boots no longer hit profile read-only panics.
+- Hamburger menu, context menu, URL bar typing, and the old black-frame popup
+  regression are covered by `docker/waterfox-musl/qemu-repro-hamburger`.
+- Wayland text clipboard bridging is implemented in `widget/minwayland` via
+  `wl_data_device_manager` and was verified in QEMU with guest `wl-copy` and
+  `wl-paste`.
+- WaterfoxBlocker is excluded from the musl build with
+  `--disable-waterfox-blocker`; staged artifact scans find no blocker files or
+  registration strings.
+- A minimal browser-owned file picker remains the next major minwayland widget
+  gap. Drag and drop, print dialogs, GTK/portal/native dialogs, and
+  accessibility are explicitly out of scope for this tranche.
+- Legacy GTK stage1/debug and release profiles still exist in the wrapper for
+  comparison and historical packaging work, but they are not the primary path
+  for GTK removal.
+- The experimental folded-library release profile builds and packages, but it
+  is not a usable release path yet: QEMU boots and browser chrome works, while
+  loading normal websites fails with the in-content "Try Again" network error
+  page.
 
 ## Main Commands
 
@@ -77,46 +82,28 @@ Report current Alpine edge versions:
 docker/waterfox-musl/wfx-musl versions
 ```
 
-Configure and validate debug config:
+Configure minwayland:
 
 ```sh
-WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl configure
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl configure-minwayland
 ```
 
-Build debug Waterfox:
+Build minwayland Waterfox:
 
 ```sh
-WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl build
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl build-minwayland
 ```
 
-Package debug Waterfox and run static dependency checks:
+Package minwayland Waterfox and run static dependency checks:
 
 ```sh
-WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl package
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl package-minwayland
 ```
 
-Rerun the staged Waterfox ELF dependency check without repackaging:
+Build the QEMU image from the minwayland staged root:
 
 ```sh
-docker/waterfox-musl/wfx-musl waterfox-deps
-```
-
-Headless Wayland smoke:
-
-```sh
-WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl smoke-headless
-```
-
-Build custom DRM/libinput kiosk compositor:
-
-```sh
-WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl kiosk-compositor
-```
-
-Build QEMU image:
-
-```sh
-WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl qemu-image
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl qemu-image-minwayland
 ```
 
 Run visible QEMU proof:
@@ -131,6 +118,14 @@ Serial-only QEMU proof:
 timeout 90s env WFX_QEMU_DISPLAY=none WFX_QEMU_ACCEL=hvf docker/waterfox-musl/wfx-musl qemu-run
 ```
 
+Legacy GTK stage1 path, only when explicitly requested:
+
+```sh
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl configure
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl build
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl package
+```
+
 Release path, only when explicitly requested:
 
 ```sh
@@ -139,35 +134,32 @@ WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl build-release
 WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl package-release
 ```
 
-If a fresh release objdir fails early with missing
-`dist/system_wrappers/.moz-case-probe`, create the directory and rerun:
-
-```sh
-mkdir -p .wfx-cache/obj-aarch64-alpine-linux-musl-release/dist/system_wrappers
-```
+Do not build release binaries unless the user explicitly asks for release work.
 
 ## Development Loop
 
 Prefer the narrowest loop that exercises the code changed.
 
-1. Gecko source/config changes: run `configure` first if build flags changed,
-   then `build`, then `package`.
-2. Runtime sysroot changes: run `sysroot`, `check`, and `sysroot-smoke` before
-   rebuilding Waterfox unless the change only affects QEMU packaging.
-3. Headless compositor/browser runtime changes: run `smoke-headless`. It is
-   faster than QEMU and catches loader, GTK, and Wayland surface regressions.
-4. QEMU rootfs/init changes: run `qemu-image`, then a bounded serial-only
-   `qemu-run`. Use Cocoa once serial shows seatd, wlroots, and Waterfox
-   surfaces.
+1. Minwayland Gecko source/config changes: run `configure-minwayland` if build
+   flags changed, then `build-minwayland`, then `package-minwayland`.
+2. QEMU rootfs/init changes: run `qemu-image-minwayland`, then a bounded
+   serial-only `qemu-run`. Use Cocoa once serial shows seatd, wlroots, and
+   Waterfox surfaces.
+3. Widget/input/popup/clipboard changes: run the relevant
+   `qemu-repro-hamburger` scenario after `package-minwayland` and
+   `qemu-image-minwayland`.
+4. Runtime sysroot changes for the legacy GTK path: run `sysroot`,
+   `sysroot-smoke`, and `check` before rebuilding Waterfox unless the change
+   only affects QEMU packaging.
 5. Keep `WFX_JOBS=8 WFX_CARGO_JOBS=8` while OrbStack has enough memory. If
    memory pressure returns, reduce jobs before changing code.
 
 Expected warm-cache timings:
 
 - Tiny incremental C++ build: seconds to minutes.
-- `package`: slower than incremental build because staging and tar/xz are mostly
-  serial.
-- `qemu-image`: tens of seconds after APK/cache warmup.
+- `package-minwayland`: slower than incremental build because staging and tar/xz
+  are mostly serial.
+- `qemu-image-minwayland`: tens of seconds after APK/cache warmup.
 - QEMU boot to Waterfox: about 20-30 seconds.
 
 ## Cache And Artifacts
@@ -178,38 +170,43 @@ Generated content lives under `.wfx-cache/` and is not tracked.
 - `.wfx-cache/sources`: source tarballs.
 - `.wfx-cache/build`: unpacked/intermediate dependency builds.
 - `.wfx-cache/build-deps`: build-only source-built deps, such as mimalloc v3.
-- `.wfx-cache/sysroot`: runtime sysroot mounted as `/opt/wfx/sysroot`.
+- `.wfx-cache/sysroot`: legacy GTK runtime sysroot mounted as `/opt/wfx/sysroot`.
 - `.wfx-cache/mozbuild`: Gecko build state.
 - `.wfx-cache/sccache`: compiler cache.
 - `.wfx-cache/cargo`: Cargo cache.
-- `.wfx-cache/obj-aarch64-alpine-linux-musl`: debug Waterfox objdir.
-- `.wfx-cache/obj-aarch64-alpine-linux-musl-release`: release Waterfox objdir.
-- `.wfx-cache/dist`: staged roots, packages, manifests, dependency reports,
-  and smoke reports.
+- `.wfx-cache/obj-aarch64-alpine-linux-musl-minwayland`: minwayland debug objdir.
+- `.wfx-cache/obj-aarch64-alpine-linux-musl`: legacy GTK debug objdir.
+- `.wfx-cache/obj-aarch64-alpine-linux-musl-release`: release objdir.
+- `.wfx-cache/dist/minwayland-root`: staged minwayland root used by
+  `qemu-image-minwayland`.
+- `.wfx-cache/dist`: staged roots, packages, manifests, dependency reports, and
+  smoke reports.
 - `.wfx-cache/kiosk-compositor`: custom DRM/libinput cage/wlroots install.
 - `.wfx-cache/qemu`: QEMU rootfs, kernel, initramfs, disk image, and repro
   screenshots/logs.
 
-Current debug artifact path:
+Current minwayland artifact path:
+
+```text
+.wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.stage1-minwayland.tar.xz
+```
+
+Current legacy GTK debug artifact path:
 
 ```text
 .wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.stage1-debug.tar.xz
 ```
 
-Current release artifact path:
-
-```text
-.wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.stage1-release.tar.xz
-```
-
-Release packaging uses `.wfx-cache/dist/release-root`. The latest release
-manifest is `.wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.manifest.txt`
-and records `mozconfig.release`, `elf_count=22`, the needed-library report, and
-the rejected-dependency report.
+The latest manifest is
+`.wfx-cache/dist/waterfox-140.11.0esr.en-US.linux-musl-aarch64.manifest.txt`.
+The manifest records the Waterfox git commit/dirty state, Alpine release,
+toolchain commands, mozconfig, APK package list, source lock, dependency
+reports, and artifact paths.
 
 The squashed `/tmp` checkout may not initially have all caches. Reuse caches
 from `/Users/josh/d/waterfox-musl/.wfx-cache/` only when needed. For QEMU-only
-iteration, `dist/stage1-root` and `kiosk-compositor` are usually enough.
+minwayland iteration, `dist/minwayland-root` and `kiosk-compositor` are usually
+enough.
 
 ## Version And Source Policy
 
@@ -221,110 +218,94 @@ Use upstream latest only when Alpine edge does not provide the required major
 version. The current example is mimalloc v3: Alpine edge carries mimalloc v2,
 so v3 is source-built and pinned in `docker/waterfox-musl/sources.lock`.
 
-Every final artifact manifest records the Waterfox git commit/dirty state,
-Alpine release, toolchain commands, mozconfig, APK package list, source lock,
-dependency reports, and artifact paths.
+Do not enable Alpine system NSS, NSPR, SQLite, ICU, media codec, or other large
+system-library substitutions as part of stage 1 unless a task explicitly targets
+that dependency policy.
 
 ## Build Configuration
 
-The debug mozconfig is `docker/waterfox-musl/mozconfig.stage1`.
+The primary debug mozconfig is `docker/waterfox-musl/mozconfig.minwayland`.
 
-Important debug choices:
+Important minwayland choices:
 
 - `--host=aarch64-alpine-linux-musl`
 - `--target=aarch64-alpine-linux-musl`
-- `--enable-default-toolkit=cairo-gtk3-wayland-only`
+- `--enable-default-toolkit=cairo-minwayland`
 - `--enable-linker=mold`
 - `--enable-debug`
 - `--disable-optimize`
 - `--enable-rust-debug`
-- `--enable-audio-backends=none`
+- `--disable-printing`
 - `--disable-webmidi-midir`
 - `--enable-mimalloc-replace`
 - `--with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc`
 - `--disable-waterfox-blocker`
 
-The release mozconfig is `docker/waterfox-musl/mozconfig.release`.
-
-Important release choices:
-
-- Separate objdir: `/cache/obj-aarch64-alpine-linux-musl-release`.
-- `--enable-release`
-- `--disable-debug`
-- `--enable-optimize=-O2`
-- `--disable-debug-symbols`
-- `--disable-rust-debug`
-- Same musl, Wayland-only, no-audio, no-X, clang/mold, static mimalloc, and
-  WaterfoxBlocker exclusion constraints as debug.
-
-Do not enable Alpine system NSS, NSPR, SQLite, ICU, media codec, or other large
-system-library substitutions as part of stage 1 unless a task explicitly targets
-that dependency policy.
-
-### Folded Release TODO
-
-The folded release profile is experimental and must not replace the normal
-release artifact until website loading is fixed and covered by a QEMU smoke.
-It is selected by `docker/waterfox-musl/mozconfig.folded-release` and the
-`configure-folded-release`, `build-folded-release`, and
-`package-folded-release` commands.
-
-Known current state:
-
-- Builds and packages successfully.
-- Folds away separate `libmozsqlite3`, NSPR, and NSS helper libraries from the
-  staged `/opt/waterfox` dependency list.
-- Boots in QEMU and renders browser chrome.
-- Fails to load normal websites, showing the browser "Try Again" page instead.
-- The same QEMU image path built from debug `stage1-root` and normal
-  `release-root` can load `google.com`.
-
-Future investigation should first isolate which folded library causes the
-network/page-load regression. Start by partially backing out folding around
-NSS/NSPR and SQLite rather than changing QEMU, networking, or the kiosk
-compositor. Add a QEMU smoke that opens an HTTPS URL and treats the in-content
-"Try Again" page as failure before considering folded release usable.
-
-## Runtime Sysroot
-
-The custom runtime sysroot installs into:
+The minwayland objdir is:
 
 ```text
-/opt/wfx/sysroot
+/cache/obj-aarch64-alpine-linux-musl-minwayland
 ```
 
-It is assembled from source-locked runtime libraries and copied into staged
-artifacts under `/opt/wfx/sysroot`. It is validated when assembling and
-smoke-testing the final runtime closure. Waterfox build-time pkg-config checks
-may use Alpine packages from `/usr`.
+The legacy GTK debug mozconfig is `docker/waterfox-musl/mozconfig.stage1`; it
+uses `--enable-default-toolkit=cairo-gtk3-wayland-only` and should only be used
+for comparison or tasks that explicitly target the old GTK stage.
 
-The current source-built runtime closure covers zlib, expat, libffi, pcre2,
-libpng, libjpeg-turbo, freetype, fontconfig, pixman, fribidi, harfbuzz, cairo,
-wayland, wayland-protocols, xkeyboard-config, libxkbcommon, gdk-pixbuf, and GTK
-3. Mimalloc v3 is separate under `/opt/wfx/build-deps/mimalloc` as a build-only
-static dependency.
+The release mozconfig is `docker/waterfox-musl/mozconfig.release`; the folded
+release mozconfig is `docker/waterfox-musl/mozconfig.folded-release`. Both are
+legacy GTK release paths unless a task explicitly updates them.
 
-Do not use Alpine stock `gtk+3.0` for the final runtime because it pulls X
-libraries. Do not use Alpine stock `cage` for the QEMU proof because its
-wlroots stack pulls unwanted XCB/Vulkan dependencies.
+If a fresh release objdir fails early with missing
+`dist/system_wrappers/.moz-case-probe`, create the directory and rerun:
+
+```sh
+mkdir -p .wfx-cache/obj-aarch64-alpine-linux-musl-release/dist/system_wrappers
+```
+
+## Runtime Closure
+
+Minwayland Waterfox should depend on raw Wayland, xkbcommon, fontconfig,
+freetype, musl, libstdc++/libgcc runtime support, and the bundled Gecko
+libraries. It must not depend on GTK/GDK/GLib/GIO/Pango/ATK, `libmozgtk.so`, or
+`libmozwayland.so`.
+
+The legacy custom GTK sysroot under `/opt/wfx/sysroot` still exists for older
+stage1 packaging and diagnostics. It covers zlib, expat, libffi, pcre2, libpng,
+libjpeg-turbo, freetype, fontconfig, pixman, fribidi, harfbuzz, cairo, wayland,
+wayland-protocols, xkeyboard-config, libxkbcommon, gdk-pixbuf, and GTK 3.
+
+Do not use Alpine stock `gtk+3.0` for the final Waterfox runtime because it
+pulls X libraries. The QEMU rootfs may include Alpine GTK only for the
+`gtk-popup-repro` diagnostic app; that is not part of the minwayland Waterfox
+runtime closure.
+
+Do not use Alpine stock `cage` for the QEMU proof because its wlroots stack
+pulls unwanted XCB/Vulkan dependencies. Use the custom kiosk compositor build.
 
 ## Dependency And Rejection Rules
 
 Static scans are in `check-waterfox-deps`, `package-stage1`,
 `build-test-compositor`, `build-kiosk-compositor`, and `check-config`.
 
-The final staged Waterfox scan compares every NEEDED entry against
-`docker/waterfox-musl/waterfox-allowed-needed.txt` and hard-fails on rejected
-dependencies. Runtime smoke also scans loaded libraries from `/proc/*/maps`.
+For minwayland packaging, these are now the defaults:
+
+```text
+WFX_STAGE_ROOT=/cache/dist/minwayland-root
+WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-minwayland-allowed-needed.txt
+```
+
+Legacy GTK package commands opt into their old stage roots and allowlists.
 
 Rejected runtime families include:
 
 - X11, X11-xcb, XCB, Xcomposite, Xcursor, Xdamage, Xext, Xfixes, Xi, Xinerama,
   Xrandr, Xrender, Xtst, Xxf86vm, xkbfile, Xwayland, and GLX.
 - Vulkan.
-- ALSA, PulseAudio, PipeWire audio.
+- PulseAudio, PipeWire audio, and ALSA unless explicitly using the ALSA debug
+  profile.
 - DBus, portals, notification, secret-service.
 - speechd and cups.
+- GTK/GDK/GLib/GIO/Pango/ATK in minwayland Waterfox artifacts.
 - dynamic `libmimalloc.so`.
 
 Relrhack and packed relative relocations are disabled. The earlier path emitted
@@ -333,6 +314,12 @@ Android packed relocation dynamic tags; Alpine musl did not apply those during
 checking `llvm-readelf` output and a packaged runtime smoke.
 
 ## QEMU Proof
+
+Preferred minwayland image build:
+
+```sh
+WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl qemu-image-minwayland
+```
 
 Preferred visible command:
 
@@ -369,6 +356,10 @@ Important QEMU defaults and knobs:
   comparison.
 - `WFX_QEMU_GUEST_FULL_DAMAGE=0`, disables the QEMU-proof default
   `MOZ_WAYLAND_FULL_DAMAGE=1`.
+- `WFX_QEMU_GUEST_CLIPBOARD_SEED`, seeds the guest Wayland clipboard with
+  `wl-copy` for paste verification.
+- `WFX_QEMU_GUEST_CLIPBOARD_PROBE_AFTER`, runs guest `wl-paste` after the given
+  number of seconds and logs the value to serial.
 - `WFX_QEMU_INCLUDE_ALPINE_FIREFOX=1`, build-time image option for Alpine
   Firefox A/B diagnostics.
 - `WFX_QEMU_INCLUDE_WESTON=1`, build-time image option for Weston compositor
@@ -387,48 +378,75 @@ page-alignment assertion and is blocked.
 ## Automated QEMU Repros
 
 Use `docker/waterfox-musl/qemu-repro-hamburger` as the fast visible regression
-loop for menu/text rendering. It boots QEMU, waits for Waterfox, clicks through
-QMP, writes full-frame PPM screenshots, writes a right-edge strip, records
-luma-based black-screen stats in `repro.txt`, and exits nonzero on effectively
-black frames.
+loop for menu/text rendering and simple QMP input flows. It boots QEMU, waits
+for Waterfox, clicks through QMP, writes full-frame PPM screenshots, writes a
+right-edge strip, records luma-based black-screen stats in `repro.txt`, and
+exits nonzero on effectively black frames.
 
-Examples:
+Hamburger menu:
 
 ```sh
 env WFX_QEMU_WIDTH=800 WFX_QEMU_HEIGHT=600 \
-  WFX_REPRO_ID=hamburger WFX_REPRO_BOOT_WAIT=15 WFX_REPRO_AFTER_CLICK_WAIT=4 \
+  WFX_REPRO_ID=hamburger WFX_REPRO_BOOT_WAIT=35 WFX_REPRO_AFTER_CLICK_WAIT=4 \
   docker/waterfox-musl/qemu-repro-hamburger
 ```
 
+Context menu:
+
 ```sh
 env WFX_QEMU_WIDTH=800 WFX_QEMU_HEIGHT=600 \
-  WFX_REPRO_ID=context WFX_REPRO_BOOT_WAIT=15 WFX_REPRO_AFTER_CLICK_WAIT=4 \
+  WFX_REPRO_ID=context WFX_REPRO_BOOT_WAIT=35 WFX_REPRO_AFTER_CLICK_WAIT=4 \
   WFX_REPRO_CLICK_X=400 WFX_REPRO_CLICK_Y=300 WFX_REPRO_BUTTON=right \
   docker/waterfox-musl/qemu-repro-hamburger
 ```
 
+URL bar typing:
+
 ```sh
 env WFX_QEMU_WIDTH=800 WFX_QEMU_HEIGHT=600 \
-  WFX_REPRO_ID=urlbar WFX_REPRO_BOOT_WAIT=15 WFX_REPRO_AFTER_CLICK_WAIT=2 \
+  WFX_REPRO_ID=urlbar WFX_REPRO_BOOT_WAIT=35 WFX_REPRO_AFTER_CLICK_WAIT=2 \
   WFX_REPRO_CLICK_X=330 WFX_REPRO_CLICK_Y=49 WFX_REPRO_TEXT=abc.com \
   docker/waterfox-musl/qemu-repro-hamburger
 ```
 
-The final passing debug repros were:
+Guest `wl-copy` to Waterfox paste:
 
-- `.wfx-cache/qemu/repro-hamburger-final-hamburger/after-hamburger.png`
-- `.wfx-cache/qemu/repro-hamburger-final-context/after-hamburger.png`
-- `.wfx-cache/qemu/repro-hamburger-final-urlbar/after-hamburger.png`
+```sh
+env WFX_QEMU_WIDTH=800 WFX_QEMU_HEIGHT=600 \
+  WFX_REPRO_ID=minwayland-clipboard-wlcopy-to-browser \
+  WFX_REPRO_BOOT_WAIT=35 WFX_REPRO_AFTER_CLICK_WAIT=2 \
+  WFX_REPRO_CLICK_X=330 WFX_REPRO_CLICK_Y=49 \
+  WFX_REPRO_KEYS_BEFORE_TEXT=ctrl-v \
+  WFX_QEMU_GUEST_CLIPBOARD_SEED=from-wl-copy \
+  docker/waterfox-musl/qemu-repro-hamburger
+```
+
+Waterfox copy to guest `wl-paste`:
+
+```sh
+env WFX_QEMU_WIDTH=800 WFX_QEMU_HEIGHT=600 \
+  WFX_REPRO_ID=minwayland-clipboard-browser-to-wlpaste \
+  WFX_REPRO_BOOT_WAIT=35 WFX_REPRO_AFTER_CLICK_WAIT=12 \
+  WFX_REPRO_CLICK_X=330 WFX_REPRO_CLICK_Y=49 \
+  WFX_REPRO_TEXT_BEFORE_KEYS=from-browser \
+  WFX_REPRO_KEYS_BEFORE_TEXT=ctrl-a,ctrl-c \
+  WFX_QEMU_GUEST_CLIPBOARD_PROBE_AFTER=45 \
+  docker/waterfox-musl/qemu-repro-hamburger
+```
+
+Check the reverse clipboard result with:
+
+```sh
+rg -n "wfx-clipboard-probe" .wfx-cache/qemu/repro-hamburger-minwayland-clipboard-browser-to-wlpaste/serial.log
+```
 
 The GTK control app is `docker/waterfox-musl/gtk-popup-repro.c`, packaged into
-the QEMU image as `/usr/bin/wfx-gtk-popup-repro`. Run it with:
+the QEMU image as `/usr/bin/wfx-gtk-popup-repro`. It is a diagnostic comparator
+only:
 
 ```sh
 WFX_QEMU_GUEST_BROWSER=gtk-popup-repro docker/waterfox-musl/qemu-repro-hamburger
 ```
-
-It proved generic GTK/Wayland popups rendered correctly in the same guest before
-the Gecko zero-font root cause was found.
 
 ## Important Fixes And Diagnostics
 
@@ -438,8 +456,7 @@ QEMU/rootfs issues already solved:
   `initramfs-virt`.
 - `apk --no-scripts` left BusyBox applets missing; `qemu-image` installs
   applet symlinks with `busybox --install -s`.
-- Cage needed `libgcc_s.so.1`; Waterfox needed `libstdc++.so.6`; GTK needed
-  `libintl.so.8`.
+- Cage needed `libgcc_s.so.1`; Waterfox needed `libstdc++.so.6`.
 - Alpine `seatd` does not support the earlier `-s` socket option.
 - QEMU input requires wlroots `drm,libinput` backends; virtio keyboard/tablet
   now create guest event devices.
@@ -457,10 +474,13 @@ Waterfox/Gecko issues already solved:
   browser chrome loads unconditionally. Without it, URL bar typing hit
   `selectedBrowser` and `UrlbarInput` exceptions after localization bundle
   failures.
-- `widget/gtk/nsLookAndFeel.cpp` clamps invalid GTK text scale from
-  `gdk_screen_get_resolution()` to `1.0f` and falls back when GTK/Pango reports
-  a missing family or non-positive font size. This fixed invisible URL bar text
-  and blank/garbled menu popups.
+- The old GTK URL bar/menu rendering failure was caused by zero-sized chrome
+  fonts from invalid GTK look-and-feel text scale. The historical fix is in
+  `widget/gtk/nsLookAndFeel.cpp`; do not chase that path for minwayland unless
+  a task explicitly targets the legacy GTK backend.
+- `widget/minwayland` now provides windows, software frame presentation,
+  pointer input, keyboard input, popup/menu behavior, and regular Wayland text
+  clipboard.
 - `--disable-waterfox-blocker` prevents WaterfoxBlocker from being built or
   registered in the musl build. The QEMU kiosk profile also disables blocker
   prefs as a runtime fallback.
@@ -480,12 +500,11 @@ Useful historical diagnostics:
 
 ## Debugging References
 
-Useful logs and reports:
+Useful docs and reports:
 
-- `.wfx-cache/build/smoke-headless/cage-waterfox.log`
-- `.wfx-cache/build/smoke-headless/loaded-libraries.txt`
+- `WIDGETS-TODO.md`: current minwayland widget scope, completed state, and file
+  picker requirements.
 - `.wfx-cache/dist/*.manifest.txt`
-- `.wfx-cache/dist/*.headless-smoke.txt`
 - `.wfx-cache/dist/*deps.txt`
 - `.wfx-cache/qemu/repro-hamburger-*/repro.txt`
 - QEMU serial output from `qemu-run`
@@ -500,19 +519,31 @@ docker run --rm --platform linux/arm64 \
   'export LD_LIBRARY_PATH=/opt/wfx/kiosk-compositor/lib:/opt/waterfox:/opt/wfx/sysroot/lib; ldd /opt/waterfox/waterfox; ldd /opt/wfx/kiosk-compositor/bin/cage'
 ```
 
+Local Wayland references:
+
+- `~/d/wl-clipboard`: useful reference for `wl_data_device_manager`,
+  `wl_data_source`, and `wl_data_offer` clipboard behavior.
+- `~/d/sway`: useful reference for production Wayland/wlroots client and
+  protocol handling patterns.
+
 ## Completion Criteria
 
-Before calling a build profile complete, verify the relevant subset:
+Before calling minwayland work complete, verify the relevant subset:
 
-- configure/check-config passes
-- build passes
-- package and static dependency scans pass
-- headless Wayland smoke passes for debug/runtime changes
-- WaterfoxBlocker remains excluded
-- QEMU image is rebuilt from the current staged root
-- QEMU boots twice in a row without profile/rootfs panics
-- Cocoa QEMU visibly renders Waterfox
-- `Ctrl-C` from a real terminal terminates QEMU cleanly
-- keyboard and mouse input reach the guest
-- hamburger menu, context menu, and URL bar typed text pass the QEMU repro
-  screenshots
+- `configure-minwayland` passes if config changed.
+- `build-minwayland` passes.
+- `package-minwayland` passes and static dependency scans pass.
+- WaterfoxBlocker remains excluded.
+- The minwayland staged artifact has no GTK/GDK/GLib/GIO/Pango/ATK,
+  `libmozgtk.so`, `libmozwayland.so`, X11/XCB/Xwayland/GLX, Vulkan, DBus,
+  portal, cups, speechd, or dynamic `libmimalloc.so` dependency.
+- QEMU image is rebuilt with `qemu-image-minwayland` from the current staged
+  root.
+- QEMU boots without profile/rootfs panics.
+- Cocoa QEMU visibly renders Waterfox.
+- `Ctrl-C` from a real terminal terminates QEMU cleanly.
+- Keyboard and mouse input reach the guest.
+- Hamburger menu, context menu, and URL bar typed text pass the QEMU repro
+  screenshots.
+- Clipboard changes pass both guest `wl-copy -> Waterfox paste` and Waterfox
+  copy -> guest `wl-paste` repros.

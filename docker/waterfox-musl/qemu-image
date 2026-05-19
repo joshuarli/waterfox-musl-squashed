@@ -3,7 +3,7 @@ set -euo pipefail
 
 cache=${WFX_CACHE:-/cache}
 repo_root=${WFX_REPO_ROOT:-/work}
-stage=${WFX_STAGE_ROOT:-$cache/dist/stage1-root}
+stage=${WFX_STAGE_ROOT:-$cache/dist/minwayland-root}
 qemu_dir=$cache/qemu
 rootfs=$qemu_dir/rootfs
 image=$qemu_dir/waterfox-kiosk.ext4
@@ -14,7 +14,7 @@ image_mb=${WFX_QEMU_IMAGE_MB:-2048}
 include_alpine_firefox=${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}
 include_weston=${WFX_QEMU_INCLUDE_WESTON:-0}
 include_alsa=${WFX_QEMU_INCLUDE_ALSA:-0}
-qemu_image_version=11
+qemu_image_version=12
 
 if [ "$include_alsa" = 1 ] && [ -z "${WFX_STAGE_ROOT+x}" ]; then
   stage=$cache/dist/alsa-debug-root
@@ -71,7 +71,8 @@ install_rootfs_packages() {
       pciutils-libs \
       seatd \
       shared-mime-info \
-      wayland >/dev/null
+      wayland \
+      wl-clipboard >/dev/null
   if [ "$include_alsa" = 1 ]; then
     apk --root "$rootfs" \
       --arch aarch64 \
@@ -249,6 +250,8 @@ full_damage=1
 pref_profile=default
 audio_test=0
 moz_log=
+clipboard_seed=
+clipboard_probe_after=
 for arg in $(cat /proc/cmdline); do
   case "$arg" in
     wfx.browser=gtk-popup-repro)
@@ -336,6 +339,12 @@ for arg in $(cat /proc/cmdline); do
     wfx.moz_log=*)
       moz_log=${arg#*=}
       ;;
+    wfx.clipboard_seed=*)
+      clipboard_seed=${arg#*=}
+      ;;
+    wfx.clipboard_probe_after=*)
+      clipboard_probe_after=${arg#*=}
+      ;;
   esac
 done
 
@@ -351,6 +360,8 @@ echo "wfx-kiosk-init: pref_profile=$pref_profile" >/dev/console
 echo "wfx-kiosk-init: audio_enabled=$audio_enabled" >/dev/console
 echo "wfx-kiosk-init: audio_test=$audio_test" >/dev/console
 echo "wfx-kiosk-init: moz_log=${moz_log:-unset}" >/dev/console
+echo "wfx-kiosk-init: clipboard_seed=${clipboard_seed:-unset}" >/dev/console
+echo "wfx-kiosk-init: clipboard_probe_after=${clipboard_probe_after:-unset}" >/dev/console
 echo "wfx-kiosk-init: browser=$browser" >/dev/console
 echo "wfx-kiosk-init: compositor=$compositor" >/dev/console
 mkdir -p "$XDG_RUNTIME_DIR" "$HOME" "$XDG_CACHE_HOME"
@@ -470,6 +481,32 @@ fi
 
 seatd -u root -g root -l error >/dev/console 2>&1 &
 sleep 1
+
+if [ -n "$clipboard_seed" ]; then
+  (
+    for i in $(seq 1 50); do
+      [ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ] && break
+      sleep 0.1
+    done
+    sleep 1
+    if printf '%s' "$clipboard_seed" | wl-copy >/dev/console 2>&1; then
+      echo "wfx-clipboard-seed: $clipboard_seed" >/dev/console
+    else
+      echo "wfx-clipboard-seed: failed" >/dev/console
+    fi
+  ) &
+fi
+
+if [ -n "$clipboard_probe_after" ]; then
+  (
+    sleep "$clipboard_probe_after"
+    if value=$(wl-paste 2>/dev/console); then
+      echo "wfx-clipboard-probe: $value" >/dev/console
+    else
+      echo "wfx-clipboard-probe: failed" >/dev/console
+    fi
+  ) &
+fi
 
 case "$compositor" in
   weston)

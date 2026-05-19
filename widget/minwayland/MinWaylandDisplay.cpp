@@ -88,6 +88,9 @@ MinWaylandDisplay::~MinWaylandDisplay() {
   if (mXdgWmBase) {
     xdg_wm_base_destroy(mXdgWmBase);
   }
+  if (mDataDeviceManager) {
+    wl_data_device_manager_destroy(mDataDeviceManager);
+  }
   if (mShm) {
     wl_shm_destroy(mShm);
   }
@@ -120,6 +123,11 @@ void MinWaylandDisplay::RegistryGlobal(void* aData, wl_registry* aRegistry,
         aRegistry, aName, &xdg_wm_base_interface, std::min(aVersion, 1u)));
     xdg_wm_base_add_listener(display->mXdgWmBase, &kXdgWmBaseListener,
                              display);
+  } else if (!strcmp(aInterface, wl_data_device_manager_interface.name)) {
+    display->mDataDeviceManager =
+        static_cast<wl_data_device_manager*>(wl_registry_bind(
+            aRegistry, aName, &wl_data_device_manager_interface,
+            std::min(aVersion, 3u)));
   } else if (!strcmp(aInterface, wl_seat_interface.name)) {
     display->mSeat = static_cast<wl_seat*>(wl_registry_bind(
         aRegistry, aName, &wl_seat_interface, std::min(aVersion, 4u)));

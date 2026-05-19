@@ -5,7 +5,7 @@
 
 #include "nsWidgetFactory.h"
 
-#include "HeadlessClipboard.h"
+#include "MinWaylandClipboard.h"
 #include "mozilla/Components.h"
 #include "mozilla/WidgetUtils.h"
 #include "nsAppShell.h"
@@ -15,7 +15,7 @@
 #include "nsLookAndFeel.h"
 
 NS_IMPL_COMPONENT_FACTORY(nsIClipboard) {
-  nsCOMPtr<nsIClipboard> inst = new mozilla::widget::HeadlessClipboard();
+  nsCOMPtr<nsIClipboard> inst = new mozilla::widget::MinWaylandClipboard();
   return inst.forget().downcast<nsISupports>();
 }
 

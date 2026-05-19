@@ -15,7 +15,8 @@ Build a Waterfox/Gecko Linux widget backend that is Wayland-only and intentional
 - no GTK/GDK/GLib/GIO/Pango
 - no accessibility
 - no drag and drop
-- no native file picker
+- no native GTK/portal file picker
+- minimal browser-owned file picker is allowed
 - no printing
 - no desktop portal integration
 
@@ -57,21 +58,96 @@ Important GTK files to study first:
 
 ## Current Progress
 
-The first build scaffold tranche is in place:
+The first minwayland QEMU/debug proof is in place:
 
 - `--enable-default-toolkit=cairo-minwayland` configures
   `MOZ_WIDGET_TOOLKIT=minwayland`, `MOZ_WIDGET_MINWAYLAND=1`, and `MOZ_WAYLAND=1`.
 - `docker/waterfox-musl/mozconfig.minwayland` plus `configure-minwayland` and
   `build-minwayland` build an arm64 musl debug objdir at
   `.wfx-cache/obj-aarch64-alpine-linux-musl-minwayland`.
-- `widget/minwayland` provides a minimal component set and uses headless-backed
-  widgets while real Wayland windows, input, clipboard, and popups are brought
-  up incrementally.
+- `package-minwayland` stages an artifact at `.wfx-cache/dist/minwayland-root`,
+  and `qemu-image-minwayland` boots it in the existing kiosk QEMU path.
+- `widget/minwayland` provides the active Linux widget backend for this profile:
+  raw Wayland display/event handling, a fullscreen/maximized `xdg_toplevel`,
+  `xdg_popup` popup widgets, software shared-memory drawing, pointer input,
+  wheel input, keyboard input through xkbcommon, basic editor shortcuts, screen
+  metrics, and hardcoded look-and-feel defaults.
+- Hamburger menu, context menu, URL bar typing, Backspace, Enter, Ctrl/Cmd+L,
+  Ctrl/Cmd+A, and browser-internal copy/paste have been verified with QEMU
+  repros. Repeated hamburger open/close stress repros also pass after removing
+  display-mutex self-locks and keeping native Wayland surface creation on the
+  main thread.
 - The minwayland configure path depends on raw Wayland, xkbcommon,
   fontconfig, and freetype rather than GTK/GDK/GLib/GIO/Pango.
+- Staged runtime comparison against the GTK stage1 root shows the expected
+  reduction: no direct GTK/GDK/GLib/GIO/Pango/ATK runtime dependency, no
+  `libmozgtk.so` or `libmozwayland.so`, and a smaller direct and transitive
+  shared-library dependency set.
 
-The runtime proof below is still open. The next tranche should replace the
-temporary headless widget with a real Wayland toplevel and event dispatch.
+The first tranche is closed for the debug QEMU proof. Remaining work is focused
+on integration depth rather than proving the backend shape.
+
+## Remaining Scope
+
+Required next:
+
+- Wayland clipboard bridging via `wl_data_device_manager`, verified in QEMU with
+  `wl-copy` and `wl-paste`.
+- Minimal browser-owned file picker for uploads and simple save paths, without
+  GTK or portal dependencies.
+
+Deferred or explicitly out of scope for the current kiosk profile:
+
+- Deep IME support: preedit/composition/candidate-window behavior for complex
+  input methods. Basic UTF-8 key input is already sufficient for URL bar and
+  normal ASCII form entry.
+- Drag and drop (DnD): Wayland data-device drag sessions between applications or
+  inside the browser. This remains out of scope.
+- Accessibility: not required for this profile.
+- Native desktop dialogs: Wayland itself has no native dialog protocol. GTK or
+  portal-backed file pickers remain out of scope; minwayland should use a
+  browser-owned picker if file selection is needed.
+- Print dialogs and printing UI are out of scope.
+
+## Minimal File Picker Requirements
+
+The first minwayland file picker should be deliberately small and owned by the
+browser/runtime, not a desktop integration layer.
+
+Required:
+
+- Support `nsIFilePicker::modeOpen` for `<input type=file>` and explicit upload
+  flows.
+- Support `modeOpenMultiple` for multi-file upload.
+- Return `nsIFilePicker::returnOK` with selected `nsIFile` objects, or
+  `returnCancel`.
+- Honor `displayDirectory` when provided, otherwise start in a constrained
+  default such as `$HOME`, `/home/wfx`, `/run/wfx-profile`, or a configured
+  kiosk downloads/uploads directory.
+- Provide keyboard and pointer navigation, including Enter to accept and Escape
+  to cancel.
+- Filter out `.` and `..`, show directories before files, and allow entering and
+  leaving directories within the allowed root policy.
+- Avoid hidden dependencies on GTK, portals, DBus, GLib, GIO, or desktop MIME
+  services.
+
+Can be deferred:
+
+- `modeSave`, overwrite confirmation, and default-extension handling.
+- `modeGetFolder`.
+- Rich previews, thumbnails, icons, recent files, bookmarks, sorting controls,
+  search, and MIME sniffing.
+- Remote URLs and virtual filesystems.
+- Camera capture modes.
+
+Implementation options:
+
+- Preferred first cut: an in-browser chrome dialog backed by the minwayland
+  `nsIFilePicker` implementation. The widget service supplies directory entries
+  and receives the selected path; Gecko/XUL/HTML handles rendering.
+- Simpler but rougher fallback: a controlled path-entry dialog that accepts a
+  typed file path under an allowed root. This is enough for diagnostics, but it
+  is not a good long-term upload UX.
 
 ## Proposed Backend Shape
 
@@ -114,12 +190,14 @@ Avoid adding GLib as a convenience event loop. Use Firefox's existing app shell/
 
 The first useful proof is not a full browser. It is:
 
-1. Build with `MOZ_WIDGET_TOOLKIT=minwayland`.
-2. Start Waterfox under a normal Linux Wayland compositor.
-3. Create one top-level `xdg_toplevel`.
-4. Paint a nonblank browser window.
-5. Accept pointer movement/clicks and keyboard input.
-6. Exit cleanly.
+1. Build with `MOZ_WIDGET_TOOLKIT=minwayland`. Done.
+2. Start Waterfox under a Wayland compositor. Done in QEMU/cage.
+3. Create one top-level `xdg_toplevel`. Done.
+4. Paint a nonblank browser window. Done.
+5. Accept pointer movement/clicks and keyboard input. Done.
+6. Render popup widgets for browser chrome menus. Done.
+7. Support browser-internal copy/paste shortcuts. Done.
+8. Exit cleanly during normal QEMU repro runs. Done.
 
 Use software WebRender first. Hardware acceleration, dmabuf, direct scanout, EGL, and VAAPI are later work.
 
