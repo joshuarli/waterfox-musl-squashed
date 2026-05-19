@@ -26,8 +26,7 @@ fail() {
   exit 1
 }
 
-[ -d "$stage/opt/waterfox" ] || fail "missing $stage/opt/waterfox"
-[ -d "$stage/opt/wfx/sysroot" ] || fail "missing $stage/opt/wfx/sysroot"
+[ -x "$stage/waterfox" ] || fail "missing $stage/waterfox"
 [ -f "$allowed" ] || fail "missing allowed dependency list $allowed"
 
 tmp_dir=$(mktemp -d)
@@ -66,7 +65,7 @@ while IFS= read -r -d '' file; do
   if "$readelf" -d "$file" 2>/dev/null | grep -E '0x000000000800002[345]' >> "$reject_report"; then
     printf 'rejected Android packed relative relocation tag in %s\n' "$rel" >> "$reject_report"
   fi
-done < <(find "$stage/opt/waterfox" "$stage/opt/wfx/sysroot" -type f -print0)
+done < <(find "$stage" -type f -print0)
 
 [ "$elf_count" -ne 0 ] || fail "no ELF files found in staged artifact"
 

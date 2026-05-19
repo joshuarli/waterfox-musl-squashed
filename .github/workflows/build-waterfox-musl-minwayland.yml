@@ -78,13 +78,19 @@ jobs:
           file "$artifact" | grep -qi 'gzip compressed data'
           tar -tzf "$artifact" >/dev/null
 
-      - name: Upload Waterfox musl minwayland artifact
+      - name: Upload Waterfox musl minwayland tarball
         uses: actions/upload-artifact@v6
         with:
-          name: waterfox-musl-minwayland-x64
+          name: waterfox-musl-minwayland-x64-tarball
+          if-no-files-found: error
+          path: .wfx-cache/dist/waterfox-*.stage1-minwayland-release-x64.tar.gz
+
+      - name: Upload Waterfox musl minwayland reports
+        uses: actions/upload-artifact@v6
+        with:
+          name: waterfox-musl-minwayland-x64-reports
           if-no-files-found: error
           path: |
-            .wfx-cache/dist/waterfox-*.stage1-minwayland-release-x64.tar.gz
             .wfx-cache/dist/waterfox-*.manifest.txt
             .wfx-cache/dist/waterfox-*.deps.txt
             .wfx-cache/dist/waterfox-*.needed.txt
@@ -166,13 +172,19 @@ jobs:
           file "$artifact" | grep -qi 'XZ compressed data'
           tar -tJf "$artifact" >/dev/null
 
-      - name: Upload Waterfox musl minwayland artifact
+      - name: Upload Waterfox musl minwayland tarball
         uses: actions/upload-artifact@v6
         with:
-          name: waterfox-musl-minwayland-arm64
+          name: waterfox-musl-minwayland-arm64-tarball
+          if-no-files-found: error
+          path: .wfx-cache/dist/waterfox-*.stage1-minwayland.tar.xz
+
+      - name: Upload Waterfox musl minwayland reports
+        uses: actions/upload-artifact@v6
+        with:
+          name: waterfox-musl-minwayland-arm64-reports
           if-no-files-found: error
           path: |
-            .wfx-cache/dist/waterfox-*.stage1-minwayland.tar.xz
             .wfx-cache/dist/waterfox-*.manifest.txt
             .wfx-cache/dist/waterfox-*.deps.txt
             .wfx-cache/dist/waterfox-*.needed.txt

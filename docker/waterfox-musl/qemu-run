@@ -61,7 +61,7 @@ default_image_is_current() {
   [ -f "$image" ] || return 1
   [ -f "$kernel" ] || return 1
   [ -f "$manifest" ] || return 1
-  grep -qx 'qemu_image_version=12' "$manifest" || return 1
+  grep -qx 'qemu_image_version=13' "$manifest" || return 1
   grep -qx 'init_profile=/run/wfx-profile' "$manifest" || return 1
   if [ "$guest_compositor" = weston ]; then
     grep -qx 'include_weston=1' "$manifest" || return 1
@@ -101,10 +101,10 @@ case "$snapshot" in
 esac
 
 case "$guest_browser" in
-  ""|waterfox|firefox|gtk-popup-repro)
+  ""|waterfox|firefox)
     ;;
   *)
-    fail "unknown WFX_QEMU_GUEST_BROWSER=$guest_browser; expected waterfox, firefox, or gtk-popup-repro"
+    fail "unknown WFX_QEMU_GUEST_BROWSER=$guest_browser; expected waterfox or firefox"
     ;;
 esac
 

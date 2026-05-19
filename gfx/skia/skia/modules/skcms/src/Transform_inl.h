@@ -156,8 +156,7 @@ SI F F_from_Half(U16 half) {
 #elif defined(USING_AVX512F)
     return (F)_mm512_cvtph_ps((__m256i)half);
 #elif defined(USING_AVX_F16C)
-    typedef int16_t __attribute__((vector_size(16))) I16;
-    return __builtin_ia32_vcvtph2ps256((I16)half);
+    return (F)_mm256_cvtph_ps((__m128i)half);
 #else
     U32 wide = cast<U32>(half);
     // A half is 1-5-10 sign-exponent-mantissa, with 15 exponent bias.
@@ -183,7 +182,7 @@ SI U16 Half_from_F(F f) {
 #elif defined(USING_AVX512F)
     return (U16)_mm512_cvtps_ph((__m512 )f, _MM_FROUND_CUR_DIRECTION );
 #elif defined(USING_AVX_F16C)
-    return (U16)__builtin_ia32_vcvtps2ph256(f, 0x04/*_MM_FROUND_CUR_DIRECTION*/);
+    return (U16)_mm256_cvtps_ph((__m256)f, _MM_FROUND_CUR_DIRECTION);
 #else
     // A float is 1-8-23 sign-exponent-mantissa, with 127 exponent bias.
     U32 sem = bit_pun<U32>(f),

@@ -320,7 +320,7 @@ case "$command" in
     run_in_image /work/docker/waterfox-musl/build-sysroot smoke
     ;;
   check)
-    run_in_image sh -euc '/work/docker/waterfox-musl/build-sysroot scan && if [ -d /cache/dist/minwayland-root/opt/waterfox ]; then /work/docker/waterfox-musl/check-waterfox-deps; fi'
+    run_in_image sh -euc '/work/docker/waterfox-musl/build-sysroot scan && if [ -x /cache/dist/minwayland-root/waterfox ]; then /work/docker/waterfox-musl/check-waterfox-deps; fi'
     ;;
   waterfox-deps)
     run_in_image /work/docker/waterfox-musl/check-waterfox-deps

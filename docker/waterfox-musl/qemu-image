@@ -14,7 +14,7 @@ image_mb=${WFX_QEMU_IMAGE_MB:-2048}
 include_alpine_firefox=${WFX_QEMU_INCLUDE_ALPINE_FIREFOX:-0}
 include_weston=${WFX_QEMU_INCLUDE_WESTON:-0}
 include_alsa=${WFX_QEMU_INCLUDE_ALSA:-0}
-qemu_image_version=12
+qemu_image_version=13
 
 if [ "$include_alsa" = 1 ] && [ -z "${WFX_STAGE_ROOT+x}" ]; then
   stage=$cache/dist/alsa-debug-root
@@ -47,7 +47,6 @@ install_rootfs_packages() {
       eudev-libs \
       font-dejavu \
       fontconfig \
-      gtk+3.0 \
       hwdata \
       libdisplay-info \
       libdrm \
@@ -113,29 +112,30 @@ EOF
       add --no-progress --no-scripts weston weston-backend-drm >/dev/null
   fi
   chroot "$rootfs" /bin/busybox --install -s
-  mkdir -p "$rootfs/usr/lib/gdk-pixbuf-2.0/2.10.0"
-  chroot "$rootfs" /usr/bin/gdk-pixbuf-query-loaders --update-cache >/dev/null 2>&1 || true
   chroot "$rootfs" /usr/bin/update-mime-database /usr/share/mime >/dev/null 2>&1 || true
 }
 
 install_payloads() {
-  require_path "$stage/opt/waterfox"
-  require_path "$stage/opt/wfx/sysroot"
-  require_path "$stage/usr/bin/waterfox"
+  require_path "$stage/waterfox"
   require_path "$compositor/bin/cage"
 
   mkdir -p "$rootfs/opt" "$rootfs/usr/bin"
-  rm -rf "$rootfs/opt/waterfox" "$rootfs/opt/wfx" "$rootfs/usr/bin/waterfox" "$rootfs/usr/bin/wfx-gtk-popup-repro"
-  cp -a "$stage/opt/waterfox" "$rootfs/opt/waterfox"
+  rm -rf "$rootfs/opt/waterfox" "$rootfs/opt/wfx" "$rootfs/usr/bin/waterfox"
+  mkdir -p "$rootfs/opt/waterfox"
+  cp -a "$stage"/. "$rootfs/opt/waterfox"
   mkdir -p "$rootfs/opt/wfx"
-  cp -a "$stage/opt/wfx/sysroot" "$rootfs/opt/wfx/sysroot"
   cp -a "$compositor" "$rootfs/opt/wfx/kiosk-compositor"
-  cp -a "$stage/usr/bin/waterfox" "$rootfs/usr/bin/waterfox"
-  clang-22 \
-    $(pkg-config --cflags gtk+-3.0) \
-    "$repo_root/docker/waterfox-musl/gtk-popup-repro.c" \
-    -o "$rootfs/usr/bin/wfx-gtk-popup-repro" \
-    $(pkg-config --libs gtk+-3.0)
+  cat > "$rootfs/usr/bin/waterfox" <<'EOF'
+#!/bin/sh
+export MOZ_ENABLE_WAYLAND=1
+export GDK_BACKEND=wayland
+export NO_AT_BRIDGE=1
+export MOZ_DISABLE_AUTO_SAFE_MODE=1
+export MOZ_CRASHREPORTER_DISABLE=1
+export LD_LIBRARY_PATH=/opt/waterfox${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+exec /opt/waterfox/waterfox "$@"
+EOF
+  chmod 0755 "$rootfs/usr/bin/waterfox"
   mkdir -p "$rootfs/usr/share/wfx"
   cat > "$rootfs/usr/share/wfx/audio-test.html" <<'EOF'
 <!doctype html>
@@ -203,7 +203,7 @@ for iface in /sys/class/net/*; do
   udhcpc -q -n -i "$iface" >/dev/console 2>&1 || echo "wfx-kiosk-init: DHCP failed on $iface" >/dev/console
   break
 done
-export LD_LIBRARY_PATH=/opt/wfx/kiosk-compositor/lib:/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=/opt/wfx/kiosk-compositor/lib:/opt/waterfox${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 export XDG_RUNTIME_DIR=/run/user/0
 export HOME=/run/wfx-home
 export XDG_CACHE_HOME=/run/wfx-cache
@@ -254,11 +254,6 @@ clipboard_seed=
 clipboard_probe_after=
 for arg in $(cat /proc/cmdline); do
   case "$arg" in
-    wfx.browser=gtk-popup-repro)
-      browser=/usr/bin/wfx-gtk-popup-repro
-      browser_ld_library_path=/opt/wfx/kiosk-compositor/lib
-      browser_args=
-      ;;
     wfx.browser=firefox)
       browser=/usr/bin/firefox
       browser_ld_library_path=/opt/wfx/kiosk-compositor/lib

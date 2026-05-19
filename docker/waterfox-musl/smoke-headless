@@ -5,7 +5,6 @@ cache=${WFX_CACHE:-/cache}
 prefix=${WFX_TEST_COMPOSITOR:-/opt/wfx/test-compositor}
 stage=${WFX_STAGE_ROOT:-$cache/dist/stage1-root}
 log_dir=$cache/build/smoke-headless
-waterfox_opt=/opt/waterfox
 runtime=/run/user/0
 readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
 
@@ -21,10 +20,7 @@ fail() {
 }
 
 [ -x "$prefix/bin/cage" ] || fail "missing $prefix/bin/cage"
-[ -d "$stage/opt/waterfox" ] || fail "missing staged /opt/waterfox"
-
-rm -f "$waterfox_opt"
-ln -s "$stage/opt/waterfox" "$waterfox_opt"
+[ -x "$stage/waterfox" ] || fail "missing staged waterfox"
 
 log=$log_dir/cage-waterfox.log
 maps_report=$log_dir/loaded-libraries.txt
@@ -75,7 +71,7 @@ export LIBGL_ALWAYS_SOFTWARE=1
 export MOZ_DISABLE_AUTO_SAFE_MODE=1
 export MOZ_CRASHREPORTER_DISABLE=1
 export WAYLAND_DEBUG=1
-export LD_LIBRARY_PATH=$waterfox_opt:$prefix/lib:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+export LD_LIBRARY_PATH=$stage:$prefix/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 
 : > "$log"
 rm -rf "$profile"
@@ -95,7 +91,7 @@ user_pref("network.predictor.enabled", false);
 user_pref("network.prefetch-next", false);
 user_pref("toolkit.telemetry.enabled", false);
 EOF
-"$prefix/bin/cage" -- "$waterfox_opt/waterfox" -no-remote -profile "$profile" about:blank > "$log" 2>&1 &
+"$prefix/bin/cage" -- "$stage/waterfox" -no-remote -profile "$profile" about:blank > "$log" 2>&1 &
 cage_pid=$!
 
 surface_seen=0
@@ -138,7 +134,7 @@ fi
   printf 'result=pass\n'
   printf 'date_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   printf 'cage=%s\n' "$prefix/bin/cage"
-  printf 'waterfox=%s\n' "$waterfox_opt/waterfox"
+  printf 'waterfox=%s\n' "$stage/waterfox"
   printf 'profile=%s\n' "$profile"
   printf 'log=%s\n' "$log"
   printf 'loaded_libraries=%s\n' "$maps_report"

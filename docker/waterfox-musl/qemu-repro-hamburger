@@ -313,8 +313,8 @@ def main():
     width = env_int("WFX_QEMU_WIDTH", 1024)
     height = env_int("WFX_QEMU_HEIGHT", 768)
     guest_browser = env("WFX_QEMU_GUEST_BROWSER", "")
-    default_click_x = width - 47 if guest_browser == "gtk-popup-repro" else width - 22
-    default_click_y = 90 if guest_browser == "gtk-popup-repro" else 49
+    default_click_x = width - 22
+    default_click_y = 49
     click_x = env_int("WFX_REPRO_CLICK_X", default_click_x)
     click_y = env_int("WFX_REPRO_CLICK_Y", default_click_y)
     click_mode = env("WFX_REPRO_CLICK_MODE", "scaled")

@@ -5,7 +5,7 @@ cache=${WFX_CACHE:-/cache}
 stage=${WFX_STAGE_ROOT:-$cache/dist/minwayland-root}
 dist=$cache/dist
 report=${WFX_CLI_SMOKE_REPORT:-$dist/waterfox-cli-smoke.txt}
-waterfox=$stage/opt/waterfox/waterfox
+waterfox=$stage/waterfox
 
 fail() {
   printf 'wfx cli smoke failed: %s\n' "$*" >&2
@@ -22,7 +22,7 @@ tmp=$(mktemp -d)
 log=$tmp/waterfox-help.log
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
-export LD_LIBRARY_PATH="$stage/opt/waterfox:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$stage${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export MOZ_CRASHREPORTER_DISABLE=1
 
 if ! "$waterfox" --help > "$log" 2>&1; then

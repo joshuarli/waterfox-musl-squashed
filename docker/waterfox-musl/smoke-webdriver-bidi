@@ -8,7 +8,7 @@ timeout_seconds=${WFX_WEBDRIVER_BIDI_TIMEOUT:-30}
 dist=$cache/dist
 report=${WFX_WEBDRIVER_BIDI_REPORT:-$dist/webdriver-bidi-smoke.txt}
 saved_log=${WFX_WEBDRIVER_BIDI_LOG:-$dist/webdriver-bidi-smoke.log}
-waterfox=$stage/opt/waterfox/waterfox
+waterfox=$stage/waterfox
 
 fail() {
   printf 'wfx webdriver bidi smoke failed: %s\n' "$*" >&2
@@ -54,7 +54,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-export LD_LIBRARY_PATH="$stage/opt/waterfox:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH="$stage${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export MOZ_HEADLESS=1
 export XDG_RUNTIME_DIR="$runtime_dir"
 unset DISPLAY

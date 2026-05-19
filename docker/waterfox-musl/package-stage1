@@ -4,7 +4,6 @@ set -euo pipefail
 repo_root=${WFX_REPO_ROOT:-/work}
 cache=${WFX_CACHE:-/cache}
 objdir=${MOZ_OBJDIR:-/cache/obj-aarch64-alpine-linux-musl-minwayland}
-sysroot=${WFX_RUNTIME_SYSROOT:-/opt/wfx/sysroot}
 dist=$cache/dist
 stage=${WFX_STAGE_ROOT:-$dist/minwayland-root}
 package=${WFX_WATERFOX_PACKAGE:-}
@@ -13,6 +12,7 @@ date_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
 artifact_suffix=${WFX_STAGE_ARTIFACT_SUFFIX:-minwayland}
 artifact_ext=${WFX_STAGE_ARTIFACT_EXT:-tar.xz}
+mozconfig=${MOZCONFIG:-}
 
 mkdir -p "$dist"
 
@@ -34,29 +34,26 @@ if [ -z "$version" ]; then
 fi
 
 rm -rf "$stage"
-mkdir -p "$stage/opt/waterfox" "$stage/opt/wfx" "$stage/usr/bin"
+mkdir -p "$stage"
 
-tar -xf "$package" -C "$stage/opt/waterfox" --strip-components=1
-tar -C "$sysroot" -cf - . | tar -C "$stage/opt/wfx" -xf -
-mv "$stage/opt/wfx" "$stage/opt/wfx.tmp"
-mkdir -p "$stage/opt/wfx"
-mv "$stage/opt/wfx.tmp" "$stage/opt/wfx/sysroot"
+tar -xf "$package" -C "$stage" --strip-components=1
 
-cat > "$stage/usr/bin/waterfox" <<'EOF'
+cat > "$stage/waterfox" <<'EOF'
 #!/bin/sh
+basedir=$(dirname "$0")
 export MOZ_ENABLE_WAYLAND=1
 export GDK_BACKEND=wayland
 export NO_AT_BRIDGE=1
 export MOZ_DISABLE_AUTO_SAFE_MODE=1
 export MOZ_CRASHREPORTER_DISABLE=1
-export LD_LIBRARY_PATH=/opt/waterfox:/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
-exec /opt/waterfox/waterfox "$@"
+export LD_LIBRARY_PATH=$basedir${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+exec "$basedir/waterfox-bin" "$@"
 EOF
-chmod 0755 "$stage/usr/bin/waterfox"
+chmod 0755 "$stage/waterfox"
 
 strip_builtin_sidebar() {
   local omni json_tmp update_root
-  omni=$stage/opt/waterfox/browser/omni.ja
+  omni=$stage/browser/omni.ja
   [ -f "$omni" ] || return 0
 
   update_root=$(mktemp -d)
@@ -107,10 +104,10 @@ fi
 
 case "$artifact_ext" in
   tar.xz)
-    tar -C "$stage" -cJf "$artifact" opt usr
+    tar -C "$stage" -cJf "$artifact" .
     ;;
   tar.gz)
-    tar -C "$stage" -cf - opt usr | gzip -c > "$artifact"
+    tar -C "$stage" -cf - . | gzip -c > "$artifact"
     ;;
   *)
     printf 'unsupported WFX_STAGE_ARTIFACT_EXT=%s; expected tar.xz or tar.gz\n' "$artifact_ext" >&2
@@ -131,7 +128,7 @@ esac
   printf 'cxx=%s\n' "$(command -v clang++-22)"
   printf 'linker=%s\n' "$(command -v mold)"
   printf 'readelf=%s\n' "$(command -v "$readelf" 2>/dev/null || printf '%s' "$readelf")"
-  printf 'mozconfig=%s\n' "$MOZCONFIG"
+  printf 'mozconfig=%s\n' "$mozconfig"
   printf 'package_alsa=%s\n' "${WFX_PACKAGE_ALSA:-0}"
   printf 'elf_count=%s\n' "$elf_count"
   printf 'dependency_scan=%s\n' "$scan_report"
@@ -141,7 +138,9 @@ esac
     printf 'cli_smoke=%s\n' "$cli_smoke_report"
   fi
   printf '\n[mozconfig]\n'
-  cat "$MOZCONFIG"
+  if [ -n "$mozconfig" ] && [ -f "$mozconfig" ]; then
+    cat "$mozconfig"
+  fi
   printf '\n[apk]\n'
   apk info -vv | sort
   printf '\n[sources.lock]\n'
