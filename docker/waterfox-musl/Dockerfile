@@ -100,7 +100,14 @@ RUN case "$TARGETARCH" in \
     ln -sf "$python_bin" /usr/local/bin/python && \
     ln -sf "$python_bin" "/usr/local/bin/python${WFX_PYTHON_VERSION%.*}"
 
-ENV PATH=/usr/lib/llvm22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+COPY pyproject.toml /opt/wfx/python-tools/pyproject.toml
+
+RUN uv venv --python /usr/local/bin/python3 /opt/wfx/python-tools/venv && \
+    uv pip install --link-mode=copy \
+      --python /opt/wfx/python-tools/venv/bin/python \
+      --group /opt/wfx/python-tools/pyproject.toml:wfx-tools
+
+ENV PATH=/opt/wfx/python-tools/venv/bin:/usr/lib/llvm22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 ENV CC=clang-22
 ENV CXX=clang++-22
 ENV HOST_CC=clang-22
@@ -132,6 +139,8 @@ clang-22 --version | sed -n '1p'
 clang++-22 --version | sed -n '1p'
 ld.lld --version | sed -n '1p'
 mold --version
+ninja --version
+meson --version
 rustc --version
 cargo --version
 python3 --version
