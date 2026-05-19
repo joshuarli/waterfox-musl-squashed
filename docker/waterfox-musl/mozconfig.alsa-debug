@@ -12,7 +12,7 @@ export STRIP=/usr/lib/llvm22/bin/llvm-strip
 export READELF=/usr/lib/llvm22/bin/llvm-readelf
 export OBJCOPY=/usr/lib/llvm22/bin/llvm-objcopy
 export LLVM_CONFIG=llvm-config-22
-export PATH=/usr/lib/ninja-build/bin:/usr/lib/llvm22/bin:$PATH
+export PATH=/usr/lib/llvm22/bin:$PATH
 export RUSTC_WRAPPER=sccache
 export MOZBUILD_STATE_PATH=/cache/mozbuild
 export SCCACHE_DIR=/cache/sccache
@@ -33,7 +33,7 @@ ac_add_options --enable-application=browser
 ac_add_options --enable-default-toolkit=cairo-gtk3-wayland-only
 ac_add_options --enable-linker=mold
 ac_add_options --with-ccache=sccache
-ac_add_options --with-libclang-path=/usr/lib/llvm21/lib
+ac_add_options --with-libclang-path=/usr/lib/llvm22/lib
 
 ac_add_options --disable-crashreporter
 ac_add_options --enable-debug

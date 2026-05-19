@@ -12,14 +12,15 @@ export STRIP=/usr/lib/llvm22/bin/llvm-strip
 export READELF=/usr/lib/llvm22/bin/llvm-readelf
 export OBJCOPY=/usr/lib/llvm22/bin/llvm-objcopy
 export LLVM_CONFIG=llvm-config-22
-export PATH=/usr/lib/ninja-build/bin:/usr/lib/llvm22/bin:$PATH
+export PATH=/usr/lib/llvm22/bin:$PATH
 export RUSTC_WRAPPER=sccache
 export MOZBUILD_STATE_PATH=/cache/mozbuild
 export SCCACHE_DIR=/cache/sccache
 export CARGO_HOME=/cache/cargo
 export CARGO_BUILD_JOBS="${WFX_CARGO_JOBS:-4}"
-export CFLAGS="-O2 -g0 -w"
-export CXXFLAGS="-O2 -g0 -w"
+export RUSTFLAGS="-C target-cpu=ivybridge"
+export CFLAGS="-O2 -march=ivybridge -g0 -w"
+export CXXFLAGS="-O2 -march=ivybridge -g0 -w"
 export LDFLAGS="-fuse-ld=mold -Wl,--pack-dyn-relocs=none"
 
 mk_add_options AUTOCLOBBER=1
@@ -32,15 +33,17 @@ ac_add_options --enable-application=browser
 ac_add_options --enable-default-toolkit=cairo-minwayland
 ac_add_options --enable-linker=mold
 ac_add_options --with-ccache=sccache
-ac_add_options --with-libclang-path=/usr/lib/llvm21/lib
+ac_add_options --with-libclang-path=/usr/lib/llvm22/lib
 
 ac_add_options --enable-release
 ac_add_options --disable-debug
-ac_add_options --enable-optimize=-O2
+ac_add_options --enable-optimize="-O2 -march=ivybridge"
 ac_add_options --disable-debug-symbols
 ac_add_options --disable-rust-debug
 ac_add_options --disable-gecko-profiler
 
+ac_add_options --disable-accessibility
+ac_add_options --disable-backgroundtasks
 ac_add_options --disable-crashreporter
 ac_add_options --disable-elf-hack
 ac_add_options --disable-packed-relative-relocs
@@ -52,7 +55,6 @@ ac_add_options --disable-tests
 ac_add_options --disable-universalchardet
 ac_add_options --disable-updater
 ac_add_options --disable-waterfox-blocker
-ac_add_options --disable-webdriver
 ac_add_options --disable-zipwriter
 
 ac_add_options --disable-necko-wifi

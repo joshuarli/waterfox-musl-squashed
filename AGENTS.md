@@ -41,7 +41,11 @@ when adapting musl or packaging fixes.
   `--enable-default-toolkit=cairo-minwayland`, producing
   `MOZ_WIDGET_TOOLKIT=minwayland`.
 - WebDriver BiDi is enabled for minwayland through Gecko's Remote Agent.
-  `geckodriver` remains disabled.
+  `geckodriver` remains disabled, and minwayland is allowed through Gecko's
+  headless startup gate.
+- `docker/waterfox-musl/wfx-musl smoke-webdriver-bidi` passes without QEMU or a
+  Wayland compositor by launching the staged browser with `--headless` and
+  validating a WebSocket upgrade to the BiDi `/session` endpoint.
 - `configure-minwayland`, `build-minwayland`, and `package-minwayland` pass for
   the debug/dev path.
 - The minwayland staged artifact scans cleanly against
@@ -107,6 +111,12 @@ Run the lightweight headless WebDriver BiDi smoke:
 ```sh
 docker/waterfox-musl/wfx-musl smoke-webdriver-bidi
 ```
+
+The smoke writes `.wfx-cache/dist/webdriver-bidi-smoke.txt` and
+`.wfx-cache/dist/webdriver-bidi-smoke.log`. It creates a private
+`XDG_RUNTIME_DIR`, unsets `DISPLAY`/`WAYLAND_DISPLAY`, and installs Alpine's
+`font-dejavu` package inside the disposable toolchain container only if
+`fc-list` reports no fonts; the staged Waterfox artifact is unchanged.
 
 Build the QEMU image from the minwayland staged root:
 
@@ -246,6 +256,7 @@ Important minwayland choices:
 - `--disable-printing`
 - `--disable-webmidi-midir`
 - WebDriver BiDi enabled; `--disable-geckodriver` remains set.
+- `--headless` works for minwayland through the shared headless widget path.
 - `--enable-mimalloc-replace`
 - `--with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc`
 - `--disable-waterfox-blocker`

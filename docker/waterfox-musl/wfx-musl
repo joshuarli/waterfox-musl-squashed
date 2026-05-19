@@ -34,6 +34,10 @@ commands:
                     Package the experimental minimal Wayland widget backend.
   smoke-webdriver-bidi
                     Verify staged Waterfox exposes the WebDriver BiDi endpoint.
+  smoke-webdriver-bidi-minwayland-release-x64
+                    Verify staged x86_64 release Waterfox exposes WebDriver BiDi.
+  configure-minwayland-release-x64
+                    Configure the optimized x86_64 musl minwayland release.
   build-minwayland-release-x64
                     Build the optimized x86_64 musl minwayland release.
   package-minwayland-release-x64
@@ -226,25 +230,19 @@ edge_versions() {
   run_in_image sh -euc '
 apk update --cache-dir /var/cache/apk >/dev/null
 packages="
-clang21
-clang21-libclang
 clang22
+clang22-libclang
 lld22
 llvm22
 rust
 cargo
 cbindgen
 sccache
-ninja-build
 mold
-samurai
-meson
 cmake
 pkgconf
-python3
 nodejs-current
 alsa-lib
-alsa-lib-dev
 alsa-utils
 gtk+3.0
 cairo
@@ -345,8 +343,14 @@ case "$command" in
   smoke-webdriver-bidi)
     run_minwayland_in_image /work/docker/waterfox-musl/smoke-webdriver-bidi
     ;;
+  smoke-webdriver-bidi-minwayland-release-x64)
+    run_minwayland_release_x64_in_image sh -euc 'WFX_STAGE_ROOT=/cache/dist/minwayland-release-x64-root WFX_WEBDRIVER_BIDI_REPORT=/cache/dist/waterfox-minwayland-release-x64.webdriver-bidi-smoke.txt WFX_WEBDRIVER_BIDI_LOG=/cache/dist/waterfox-minwayland-release-x64.webdriver-bidi-smoke.log /work/docker/waterfox-musl/smoke-webdriver-bidi'
+    ;;
+  configure-minwayland-release-x64)
+    run_minwayland_release_x64_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc-x86_64 /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-x86_64-alpine-linux-musl-minwayland-release WFX_CONFIG_MODE=release WFX_CONFIG_WEBDRIVER=1 WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_CONFIG_MIMALLOC_PREFIX=/opt/wfx/build-deps/mimalloc-x86_64 /work/docker/waterfox-musl/check-config'
+    ;;
   build-minwayland-release-x64)
-    run_minwayland_release_x64_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc-x86_64 /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-x86_64-alpine-linux-musl-minwayland-release WFX_CONFIG_MODE=release WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_CONFIG_MIMALLOC_PREFIX=/opt/wfx/build-deps/mimalloc-x86_64 /work/docker/waterfox-musl/check-config && ./mach build'
+    run_minwayland_release_x64_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc-x86_64 /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-x86_64-alpine-linux-musl-minwayland-release WFX_CONFIG_MODE=release WFX_CONFIG_WEBDRIVER=1 WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_CONFIG_MIMALLOC_PREFIX=/opt/wfx/build-deps/mimalloc-x86_64 /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package-minwayland-release-x64)
     run_minwayland_release_x64_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-x86_64-alpine-linux-musl-minwayland-release WFX_STAGE_ROOT=/cache/dist/minwayland-release-x64-root WFX_STAGE_ARTIFACT_SUFFIX=minwayland-release-x64 WFX_STAGE_ARTIFACT_EXT=tar.gz WFX_PACKAGE_CLI_SMOKE=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-minwayland-x86_64-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'

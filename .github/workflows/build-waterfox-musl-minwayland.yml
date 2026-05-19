@@ -66,6 +66,10 @@ jobs:
           WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
             docker/waterfox-musl/wfx-musl package-minwayland-release-x64
 
+      - name: Smoke WebDriver BiDi
+        shell: bash
+        run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi-minwayland-release-x64
+
       - name: Verify gzip artifact
         shell: bash
         run: |
@@ -86,3 +90,92 @@ jobs:
             .wfx-cache/dist/waterfox-*.needed.txt
             .wfx-cache/dist/waterfox-*.rejected-deps.txt
             .wfx-cache/dist/waterfox-*.cli-smoke.txt
+            .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.txt
+            .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.log
+
+  build-minwayland-arm64:
+    name: arm64 musl minwayland
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      actions: read
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: waterfox-musl-minwayland-arm64-v1
+      WFX_DOCKER_PLATFORM: linux/arm64
+      WFX_IMAGE: waterfox-musl:edge-clang22
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Restore Waterfox musl cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            .wfx-cache/apk
+            .wfx-cache/build-deps
+            .wfx-cache/cargo
+            .wfx-cache/mozbuild
+            .wfx-cache/sources
+          key: waterfox-musl-minwayland-arm64-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            waterfox-musl-minwayland-arm64-${{ runner.os }}-
+
+      - name: Build toolchain image
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/waterfox-musl
+          file: docker/waterfox-musl/Dockerfile
+          platforms: linux/arm64
+          load: true
+          tags: waterfox-musl:edge-clang22
+          cache-from: type=gha,scope=waterfox-musl-toolchain-arm64
+          cache-to: type=gha,scope=waterfox-musl-toolchain-arm64,mode=max
+
+      - name: Build Waterfox
+        shell: bash
+        run: |
+          jobs="$(nproc)"
+          WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
+            docker/waterfox-musl/wfx-musl build-minwayland
+
+      - name: Package Waterfox
+        shell: bash
+        run: |
+          jobs="$(nproc)"
+          WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
+            docker/waterfox-musl/wfx-musl package-minwayland
+
+      - name: Smoke WebDriver BiDi
+        shell: bash
+        run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi
+
+      - name: Verify xz artifact
+        shell: bash
+        run: |
+          artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland.tar.xz' | sort | tail -n 1)"
+          test -n "$artifact"
+          file "$artifact" | grep -qi 'XZ compressed data'
+          tar -tJf "$artifact" >/dev/null
+
+      - name: Upload Waterfox musl minwayland artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: waterfox-musl-minwayland-arm64
+          if-no-files-found: error
+          path: |
+            .wfx-cache/dist/waterfox-*.stage1-minwayland.tar.xz
+            .wfx-cache/dist/waterfox-*.manifest.txt
+            .wfx-cache/dist/waterfox-*.deps.txt
+            .wfx-cache/dist/waterfox-*.needed.txt
+            .wfx-cache/dist/waterfox-*.rejected-deps.txt
+            .wfx-cache/dist/webdriver-bidi-smoke.txt
+            .wfx-cache/dist/webdriver-bidi-smoke.log

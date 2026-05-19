@@ -67,7 +67,7 @@ case "$mode" in
 esac
 require_config MOZ_MIMALLOC_REPLACE 1
 require_config WFX_MIMALLOC_PREFIX "$expect_mimalloc_prefix"
-require_config MOZ_LIBCLANG_PATH /usr/lib/llvm21/lib
+require_config MOZ_LIBCLANG_PATH /usr/lib/llvm22/lib
 
 if [ -n "$expect_widget_toolkit" ]; then
   require_config MOZ_WIDGET_TOOLKIT "$expect_widget_toolkit"

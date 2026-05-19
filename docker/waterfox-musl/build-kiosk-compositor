@@ -11,7 +11,7 @@ jobs=${JOBS:-${WFX_JOBS:-$(nproc)}}
 
 mkdir -p "$sources" "$build_root" "$prefix" "$prefix/.wfx-stamps"
 
-export PATH=$prefix/bin:/usr/lib/ninja-build/bin:/usr/lib/llvm22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH=$prefix/bin:/usr/lib/llvm22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export CC=${CC:-clang-22}
 export CXX=${CXX:-clang++-22}
 export PKG_CONFIG_PATH=$prefix/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}
@@ -106,9 +106,17 @@ mark_built() {
   } > "$stamp"
 }
 
+ensure_meson() {
+  if command -v meson >/dev/null 2>&1 && command -v ninja >/dev/null 2>&1; then
+    return 0
+  fi
+  . "$repo_root/docker/waterfox-musl/python-tools-env"
+}
+
 meson_build_install() {
   local dir=$1 build=$2
   shift 2
+  ensure_meson
   meson setup "$dir/$build" "$dir" \
     --prefix="$prefix" \
     --libdir=lib \
