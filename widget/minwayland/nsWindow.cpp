@@ -4,14 +4,15 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 #include "HeadlessWidget.h"
+#include "MinWaylandWindow.h"
 #include "nsIWidget.h"
 
 already_AddRefed<nsIWidget> nsIWidget::CreateTopLevelWindow() {
-  nsCOMPtr<nsIWidget> widget = new mozilla::widget::HeadlessWidget();
+  nsCOMPtr<nsIWidget> widget = new mozilla::widget::MinWaylandWindow();
   return widget.forget();
 }
 
 already_AddRefed<nsIWidget> nsIWidget::CreateChildWindow() {
-  nsCOMPtr<nsIWidget> widget = new mozilla::widget::HeadlessWidget();
+  nsCOMPtr<nsIWidget> widget = new mozilla::widget::MinWaylandWindow();
   return widget.forget();
 }

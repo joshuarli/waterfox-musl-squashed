@@ -29,6 +29,8 @@ commands:
   configure-minwayland
                     Configure the experimental minimal Wayland widget backend.
   build-minwayland Build the experimental minimal Wayland widget backend.
+  package-minwayland
+                    Package the experimental minimal Wayland widget backend.
   build             Reserved for the Waterfox build tranche.
   package           Reserved for the package tranche.
   configure-alsa    Configure the debug ALSA build.
@@ -48,6 +50,8 @@ commands:
   smoke-headless    Reserved for Docker headless Wayland/cage smoke.
   kiosk-compositor  Build the custom DRM/libinput cage compositor.
   qemu-image        Assemble the QEMU Alpine aarch64 kiosk rootfs image.
+  qemu-image-minwayland
+                    Assemble QEMU image from the minimal Wayland widget root.
   qemu-run          Boot the QEMU visible kiosk proof.
   qemu-audio        Boot QEMU, capture Waterfox audio to WAV, and verify it.
 EOF
@@ -292,6 +296,9 @@ case "$command" in
   build-minwayland)
     run_minwayland_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && ./mach build'
     ;;
+  package-minwayland)
+    run_minwayland_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-minwayland WFX_STAGE_ROOT=/cache/dist/minwayland-root WFX_STAGE_ARTIFACT_SUFFIX=minwayland WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-minwayland-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
+    ;;
   build)
     run_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
@@ -336,6 +343,9 @@ case "$command" in
     ;;
   qemu-image)
     refresh_qemu_image
+    ;;
+  qemu-image-minwayland)
+    run_in_image sh -euc 'WFX_STAGE_ROOT=/cache/dist/minwayland-root /work/docker/waterfox-musl/build-kiosk-compositor build && WFX_STAGE_ROOT=/cache/dist/minwayland-root /work/docker/waterfox-musl/qemu-image build'
     ;;
   qemu-run)
     "$script_dir/qemu-run"

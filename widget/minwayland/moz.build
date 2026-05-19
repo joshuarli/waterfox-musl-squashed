@@ -14,16 +14,24 @@ EXPORTS += [
 
 EXPORTS.mozilla.widget += [
     "GfxInfo.h",
+    "wayland/xdg-shell-client-protocol.h",
 ]
 
 UNIFIED_SOURCES += [
     "GfxInfo.cpp",
+    "MinWaylandDisplay.cpp",
     "MinWaylandServices.cpp",
+    "MinWaylandWindow.cpp",
     "nsAppShell.cpp",
     "nsBidiKeyboard.cpp",
     "nsLookAndFeel.cpp",
     "nsWidgetFactory.cpp",
     "nsWindow.cpp",
+]
+
+SOURCES += [
+    "wayland/wayland-protocol.c",
+    "wayland/xdg-shell-protocol.c",
 ]
 
 XPCOM_MANIFESTS += [

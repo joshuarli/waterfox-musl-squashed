@@ -39,7 +39,7 @@ namespace mozilla {
 enum class NativeKeyBindingsType : uint8_t;
 namespace widget {
 
-class HeadlessWidget final : public nsBaseWidget {
+class HeadlessWidget : public nsBaseWidget {
  public:
   HeadlessWidget();
 
@@ -132,8 +132,10 @@ class HeadlessWidget final : public nsBaseWidget {
                                        int32_t aModifierFlags,
                                        nsIObserver* aObserver) override;
 
- private:
+ protected:
   ~HeadlessWidget();
+
+ private:
   bool mEnabled;
   bool mVisible;
   bool mDestroyed;

@@ -271,6 +271,16 @@ def send_text(sock, text):
         time.sleep(0.04)
 
 
+def send_keys(sock, keys):
+    for key in keys:
+        qmp_cmd(
+            sock,
+            "human-monitor-command",
+            {"command-line": f"sendkey {key}"},
+        )
+        time.sleep(0.08)
+
+
 def terminate(process):
     if process is None or process.poll() is not None:
         return
@@ -309,8 +319,18 @@ def main():
     click_y = env_int("WFX_REPRO_CLICK_Y", default_click_y)
     click_mode = env("WFX_REPRO_CLICK_MODE", "scaled")
     click_button = env("WFX_REPRO_BUTTON", "left")
+    click_count = env_int("WFX_REPRO_CLICK_COUNT", 1)
+    click_interval = env_float("WFX_REPRO_CLICK_INTERVAL", 0.2)
+    text_before_keys = env("WFX_REPRO_TEXT_BEFORE_KEYS", "")
     text = env("WFX_REPRO_TEXT", "")
+    keys_before_text = [
+        key for key in env("WFX_REPRO_KEYS_BEFORE_TEXT", "").split(",") if key
+    ]
+    keys = [key for key in env("WFX_REPRO_KEYS", "").split(",") if key]
     after_type_wait = env_float("WFX_REPRO_AFTER_TYPE_WAIT", 0.5)
+    after_keys_before_text_wait = env_float(
+        "WFX_REPRO_AFTER_KEYS_BEFORE_TEXT_WAIT", 0.8
+    )
     boot_wait = env_float("WFX_REPRO_BOOT_WAIT", 35)
     after_click_wait = env_float("WFX_REPRO_AFTER_CLICK_WAIT", 10)
     strip_width = env_int("WFX_REPRO_STRIP_WIDTH", 64)
@@ -375,7 +395,13 @@ def main():
                 "click_y": click_y,
                 "click_button": click_button,
                 "click_mode": click_mode,
+                "click_count": click_count,
+                "click_interval": click_interval,
+                "text_before_keys": text_before_keys,
                 "text": text,
+                "keys_before_text": ",".join(keys_before_text),
+                "after_keys_before_text_wait": after_keys_before_text_wait,
+                "keys": ",".join(keys),
                 "before": before,
                 "after": after,
                 "strip_width": strip_width,
@@ -400,9 +426,21 @@ def main():
                     raise SystemExit("before screendump is effectively black")
 
             x, y = scaled_click_position(click_x, click_y, width, height, click_mode)
-            send_click(sock, x, y, click_button)
+            for click_index in range(click_count):
+                send_click(sock, x, y, click_button)
+                if click_index + 1 < click_count:
+                    time.sleep(click_interval)
+            if text_before_keys:
+                send_text(sock, text_before_keys)
+            if keys_before_text:
+                send_keys(sock, keys_before_text)
+                if text:
+                    time.sleep(after_keys_before_text_wait)
             if text:
                 send_text(sock, text)
+            if keys:
+                send_keys(sock, keys)
+            if text_before_keys or keys_before_text or text or keys:
                 time.sleep(after_type_wait)
             time.sleep(after_click_wait)
 

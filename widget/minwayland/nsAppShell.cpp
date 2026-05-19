@@ -5,17 +5,31 @@
 
 #include "nsAppShell.h"
 
-#include "mozilla/RefPtr.h"
-#include "nsThreadUtils.h"
+#include "HeadlessScreenHelper.h"
+#include "MinWaylandDisplay.h"
+#include "mozilla/Hal.h"
+#include "mozilla/widget/ScreenManager.h"
 
-nsresult nsAppShell::Init() { return nsBaseAppShell::Init(); }
+using mozilla::MakeUnique;
+using mozilla::widget::MinWaylandDisplay;
+using mozilla::widget::ScreenManager;
 
-void nsAppShell::ScheduleNativeEventCallback() {
-  NS_DispatchToMainThread(
-      NS_NewRunnableFunction("minwayland native event callback",
-                             [self = RefPtr<nsAppShell>(this)] {
-                               self->NativeEventCallback();
-                             }));
+nsresult nsAppShell::Init() {
+  mozilla::hal::Init();
+  if (XRE_IsParentProcess()) {
+    ScreenManager::GetSingleton().SetHelper(
+        MakeUnique<mozilla::widget::HeadlessScreenHelper>());
+  }
+  return nsBaseAppShell::Init();
 }
 
-bool nsAppShell::ProcessNextNativeEvent(bool aMayWait) { return false; }
+nsAppShell::~nsAppShell() { mozilla::hal::Shutdown(); }
+
+void nsAppShell::ScheduleNativeEventCallback() {}
+
+bool nsAppShell::ProcessNextNativeEvent(bool aMayWait) {
+  if (MinWaylandDisplay* display = MinWaylandDisplay::Get()) {
+    display->DispatchPending(aMayWait);
+  }
+  return false;
+}

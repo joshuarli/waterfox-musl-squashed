@@ -13,7 +13,7 @@ class nsAppShell final : public nsBaseAppShell {
   nsresult Init();
 
  protected:
-  ~nsAppShell() override = default;
+  ~nsAppShell() override;
 
   void ScheduleNativeEventCallback() override;
   bool ProcessNextNativeEvent(bool aMayWait) override;

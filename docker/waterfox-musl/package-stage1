@@ -17,7 +17,8 @@ mkdir -p "$dist"
 
 if [ -z "$package" ]; then
   package=$(find "$objdir/dist" -maxdepth 1 -type f \
-    -name 'waterfox-*.linux-musl-aarch64.tar.xz' | sort | tail -n 1)
+    \( -name 'waterfox-*.linux-musl-aarch64.tar.xz' -o \
+       -name 'waterfox-*.linux-musl-aarch64.tar.gz' \) | sort | tail -n 1)
 fi
 
 if [ -z "$package" ] || [ ! -f "$package" ]; then
@@ -26,7 +27,9 @@ if [ -z "$package" ] || [ ! -f "$package" ]; then
 fi
 
 if [ -z "$version" ]; then
-  version=$(basename "$package" .tar.xz)
+  version=$(basename "$package")
+  version=${version%.tar.xz}
+  version=${version%.tar.gz}
 fi
 
 rm -rf "$stage"
