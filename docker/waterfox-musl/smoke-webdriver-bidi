@@ -24,9 +24,11 @@ command -v nc >/dev/null 2>&1 || fail "missing nc"
 mkdir -p "$dist"
 tmp=$(mktemp -d)
 profile=$tmp/profile
+runtime_dir=$tmp/runtime
 log=$tmp/waterfox.log
 response=$tmp/handshake.response
-mkdir -p "$profile"
+mkdir -p "$profile" "$runtime_dir"
+chmod 700 "$runtime_dir"
 
 cat > "$profile/user.js" <<'EOF'
 user_pref("browser.shell.checkDefaultBrowser", false);
@@ -54,9 +56,15 @@ trap cleanup EXIT INT TERM
 
 export LD_LIBRARY_PATH="$stage/opt/waterfox:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export MOZ_HEADLESS=1
+export XDG_RUNTIME_DIR="$runtime_dir"
 unset DISPLAY
 unset WAYLAND_DISPLAY
 unset MOZ_ENABLE_WAYLAND
+
+if command -v fc-list >/dev/null 2>&1 && [ -z "$(fc-list | sed -n '1p')" ]; then
+  apk update --cache-dir /var/cache/apk >/dev/null
+  apk add --cache-dir /var/cache/apk --no-progress font-dejavu >/dev/null
+fi
 
 "$waterfox" \
   --headless \
