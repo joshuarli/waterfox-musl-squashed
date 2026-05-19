@@ -70,23 +70,24 @@ jobs:
         shell: bash
         run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi-minwayland-release-x64
 
-      - name: Verify gzip artifact
+      - name: Verify xz artifact
         shell: bash
         run: |
-          artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland-release-x64.tar.gz' | sort | tail -n 1)"
+          artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland-release-x64.tar.xz' | sort | tail -n 1)"
           test -n "$artifact"
-          file "$artifact" | grep -qi 'gzip compressed data'
-          tar -tzf "$artifact" >/dev/null
+          file "$artifact" | grep -qi 'XZ compressed data'
+          tar -tJf "$artifact" >/dev/null
 
       - name: Upload Waterfox musl minwayland tarball
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: waterfox-musl-minwayland-x64-tarball
           if-no-files-found: error
-          path: .wfx-cache/dist/waterfox-*.stage1-minwayland-release-x64.tar.gz
+          path: .wfx-cache/dist/waterfox-*.stage1-minwayland-release-x64.tar.xz
+          archive: false
 
       - name: Upload Waterfox musl minwayland reports
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: waterfox-musl-minwayland-x64-reports
           if-no-files-found: error
@@ -99,8 +100,8 @@ jobs:
             .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.txt
             .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.log
 
-  build-minwayland-arm64:
-    name: arm64 musl minwayland
+  build-minwayland-release-arm64:
+    name: arm64 musl minwayland release
     runs-on: ubuntu-24.04-arm
     permissions:
       contents: read
@@ -151,36 +152,37 @@ jobs:
         run: |
           jobs="$(nproc)"
           WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
-            docker/waterfox-musl/wfx-musl build-minwayland
+            docker/waterfox-musl/wfx-musl build-minwayland-release-arm64
 
       - name: Package Waterfox
         shell: bash
         run: |
           jobs="$(nproc)"
           WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
-            docker/waterfox-musl/wfx-musl package-minwayland
+            docker/waterfox-musl/wfx-musl package-minwayland-release-arm64
 
       - name: Smoke WebDriver BiDi
         shell: bash
-        run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi
+        run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi-minwayland-release-arm64
 
       - name: Verify xz artifact
         shell: bash
         run: |
-          artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland.tar.xz' | sort | tail -n 1)"
+          artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland-release-arm64.tar.xz' | sort | tail -n 1)"
           test -n "$artifact"
           file "$artifact" | grep -qi 'XZ compressed data'
           tar -tJf "$artifact" >/dev/null
 
       - name: Upload Waterfox musl minwayland tarball
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: waterfox-musl-minwayland-arm64-tarball
           if-no-files-found: error
-          path: .wfx-cache/dist/waterfox-*.stage1-minwayland.tar.xz
+          path: .wfx-cache/dist/waterfox-*.stage1-minwayland-release-arm64.tar.xz
+          archive: false
 
       - name: Upload Waterfox musl minwayland reports
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: waterfox-musl-minwayland-arm64-reports
           if-no-files-found: error
@@ -189,5 +191,5 @@ jobs:
             .wfx-cache/dist/waterfox-*.deps.txt
             .wfx-cache/dist/waterfox-*.needed.txt
             .wfx-cache/dist/waterfox-*.rejected-deps.txt
-            .wfx-cache/dist/webdriver-bidi-smoke.txt
-            .wfx-cache/dist/webdriver-bidi-smoke.log
+            .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.txt
+            .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.log
