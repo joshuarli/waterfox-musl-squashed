@@ -678,6 +678,19 @@ def wayland_packages(toolkit_gtk_wayland, toolkit_minwayland):
         return "wayland-client >= 1.20 wayland-cursor xkbcommon >= 0.4.1"
 
 
+option(
+    env="WFX_STATIC_WAYLAND_PKG_CONFIG",
+    help="Use pkg-config --static for Waterfox musl Wayland/xkbcommon experiments",
+)
+
+
+@depends("WFX_STATIC_WAYLAND_PKG_CONFIG")
+def static_wayland_pkg_config(value):
+    return bool(value)
+
+
+set_config("WFX_STATIC_WAYLAND_PKG_CONFIG", static_wayland_pkg_config)
+
 # Wayland support
 # ==============================================================
 wayland_headers = pkg_check_modules(
@@ -685,6 +698,7 @@ wayland_headers = pkg_check_modules(
     wayland_packages,
     allow_missing=toolkit_gtk_wayland_optional,
     when=toolkit_wayland,
+    static=static_wayland_pkg_config,
 )
 
 

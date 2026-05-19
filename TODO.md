@@ -102,7 +102,7 @@ Validation:
 
 ## Phase 3: Static Font Stack
 
-Status: active implementation target.
+Status: implemented for the folded debug path.
 
 Scope:
 - Build a static-only font stack for the folded experiment under
@@ -129,15 +129,35 @@ Validation:
 
 ## Phase 4: Static Wayland Client Pieces
 
-Candidates:
-- `libwayland-client.so.0`
-- `libxkbcommon.so.0`
+Status: implemented for the folded debug path.
+
+Scope:
+- Build a static-only Wayland/input stack for the folded experiment under
+  `/opt/wfx/build-deps/waylandstack`.
+- Static archives: libffi, Wayland client/cursor, and libxkbcommon.
+- Use pkg-config `--static` only for the Wayland/xkbcommon check. Do not apply
+  static pkg-config globally.
+- Keep the QEMU compositor runtime dependency policy separate from Waterfox.
+  Cage/wlroots may still need dynamic Wayland and xkbcommon libraries.
+
+Expected result:
+- `libwayland-client.so.0` disappears from folded staged Waterfox `DT_NEEDED`.
+- `libxkbcommon.so.0` disappears from folded staged Waterfox `DT_NEEDED`.
+- Package scans still allow only musl and bundled Gecko/NSS/NSPR libraries.
 
 This mostly simplifies the Waterfox package closure. It probably does not
 simplify the full Laputa image if the compositor stack already carries Wayland
 and xkbcommon dynamically.
 
 Validation:
+- `configure-folded` passes and records the waylandstack library path in
+  `MOZ_WAYLAND_LIBS`.
+- `package-folded` passes using `waterfox-minwayland-folded-allowed-needed.txt`.
+- The folded package check runs in hermetic mode: every non-libc `DT_NEEDED`
+  entry from every staged Waterfox ELF must be provided by a bundled Waterfox
+  shared object.
+- `smoke-webdriver-bidi-folded` passes.
+- `qemu-image-folded` rebuilds from `.wfx-cache/dist/folded-root`.
 - Pointer input, keyboard input, popups, menus, and clipboard repros.
 - No change to the compositor runtime dependency policy.
 

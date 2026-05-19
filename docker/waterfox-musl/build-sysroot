@@ -230,16 +230,20 @@ prefix_expat_symbols() {
 }
 
 build_libffi() {
-  local dir
+  local dir library_flags
   already_built libffi && return 0
   fetch_source libffi
   dir=$(unpack_source libffi)
   cd "$dir"
+  if [ "$static_only" = 1 ]; then
+    library_flags=(--enable-static --disable-shared)
+  else
+    library_flags=(--disable-static --enable-shared)
+  fi
   ./configure \
     --prefix="$prefix" \
     --libdir="$prefix/lib" \
-    --disable-static \
-    --enable-shared \
+    "${library_flags[@]}" \
     --disable-multi-os-directory \
     --disable-docs
   run_make_install
@@ -531,7 +535,7 @@ build_wayland() {
   fetch_source wayland
   dir=$(unpack_source wayland)
   meson_build_install "$dir" build-wfx \
-    -Ddefault_library=shared \
+    -Ddefault_library="$(library_mode)" \
     -Ddocumentation=false \
     -Ddtd_validation=false \
     -Dtests=false \
@@ -569,7 +573,7 @@ build_libxkbcommon() {
   fetch_source libxkbcommon
   dir=$(unpack_source libxkbcommon)
   meson_build_install "$dir" build-wfx \
-    -Ddefault_library=shared \
+    -Ddefault_library="$(library_mode)" \
     -Denable-tools=false \
     -Denable-x11=false \
     -Denable-wayland=false \
@@ -852,6 +856,46 @@ build_fontstack_static() {
   scan_fontstack_static
 }
 
+clean_waylandstack_static() {
+  rm -rf \
+    "$prefix/share/doc" \
+    "$prefix/share/info" \
+    "$prefix/share/locale" \
+    "$prefix/share/man"
+  rm -f "$prefix/bin/wayland-scanner"
+  find "$prefix/lib" \( -type f -o -type l \) -name '*.la' -delete 2>/dev/null || true
+}
+
+scan_waylandstack_static() {
+  local failed=0 archive
+  for archive in libffi.a libwayland-client.a libwayland-cursor.a libxkbcommon.a; do
+    if [ ! -f "$prefix/lib/$archive" ]; then
+      printf 'missing static Wayland stack archive: %s\n' "$prefix/lib/$archive" >&2
+      failed=1
+    fi
+  done
+  if find "$prefix/lib" \( -name '*.so' -o -name '*.so.*' \) -print -quit | grep -q .; then
+    find "$prefix/lib" \( -name '*.so' -o -name '*.so.*' \) -print >&2
+    failed=1
+  fi
+  PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig:$prefix/share/pkgconfig" \
+    PKG_CONFIG_PATH= \
+    pkgconf --static --libs wayland-client wayland-cursor xkbcommon >/dev/null
+  [ "$failed" -eq 0 ] || exit 1
+}
+
+build_waylandstack_static() {
+  require_clang
+  static_only=1
+  build_libffi
+  build_wayland
+  build_wayland_protocols
+  build_xkeyboard_config
+  build_libxkbcommon
+  clean_waylandstack_static
+  scan_waylandstack_static
+}
+
 case "${1:-build-initial}" in
   build-initial)
     build_initial
@@ -863,6 +907,9 @@ case "${1:-build-initial}" in
   build-fontstack-static)
     build_fontstack_static
     ;;
+  build-waylandstack-static)
+    build_waylandstack_static
+    ;;
   scan)
     clean_sysroot
     scan_sysroot
@@ -872,7 +919,7 @@ case "${1:-build-initial}" in
     smoke_compile
     ;;
   *)
-    printf 'usage: build-sysroot [build-initial|build-mimalloc|build-fontstack-static|scan|smoke]\n' >&2
+    printf 'usage: build-sysroot [build-initial|build-mimalloc|build-fontstack-static|build-waylandstack-static|scan|smoke]\n' >&2
     exit 2
     ;;
 esac

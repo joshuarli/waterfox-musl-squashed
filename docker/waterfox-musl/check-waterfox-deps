@@ -11,6 +11,8 @@ reject_report=${WFX_WATERFOX_DEPS_REJECT_REPORT:-$cache/dist/waterfox-final.reje
 needed_report=${WFX_WATERFOX_NEEDED_REPORT:-$cache/dist/waterfox-final.needed.txt}
 allow_alsa=${WFX_WATERFOX_ALLOW_ALSA:-0}
 allow_gtk=${WFX_WATERFOX_ALLOW_GTK:-0}
+hermetic=${WFX_WATERFOX_HERMETIC:-0}
+hermetic_baseline_regex=${WFX_WATERFOX_HERMETIC_BASELINE_REGEX:-'^libc\.musl-.*\.so\.1$'}
 deny_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
 
 if [ "$allow_alsa" != 1 ]; then
@@ -33,16 +35,20 @@ tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
 actual=$tmp_dir/actual.txt
 expected=$tmp_dir/expected.txt
+providers=$tmp_dir/providers.txt
 unexpected=$tmp_dir/unexpected.txt
 missing=$tmp_dir/missing.txt
+unresolved=$tmp_dir/unresolved.txt
 
 sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; s/[[:space:]]//g; p' "$allowed" | sort -u > "$expected"
 : > "$actual"
+: > "$providers"
 : > "$report"
 : > "$reject_report"
 
 elf_count=0
 while IFS= read -r -d '' file; do
+  base=$(basename "$file")
   if ! "$readelf" -h "$file" >/dev/null 2>&1; then
     continue
   fi
@@ -58,6 +64,14 @@ while IFS= read -r -d '' file; do
   "$readelf" -d "$file" 2>/dev/null |
     sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' >> "$actual"
 
+  "$readelf" -d "$file" 2>/dev/null |
+    sed -n 's/.*Library soname: \[\(.*\)\]/\1/p' >> "$providers"
+  case "$base" in
+    lib*.so|lib*.so.*)
+      printf '%s\n' "$base" >> "$providers"
+      ;;
+  esac
+
   if "$readelf" -d "$file" 2>/dev/null | grep -E "$deny_regex" >> "$reject_report"; then
     printf 'rejected dependency in %s\n' "$rel" >> "$reject_report"
   fi
@@ -70,6 +84,7 @@ done < <(find "$stage" -type f -print0)
 [ "$elf_count" -ne 0 ] || fail "no ELF files found in staged artifact"
 
 sort -u "$actual" -o "$actual"
+sort -u "$providers" -o "$providers"
 if [ "$allow_alsa" = 1 ] && grep -Eq '^libasound\.so' "$actual"; then
   grep -E '^libasound\.so' "$actual" >> "$expected"
   sort -u "$expected" -o "$expected"
@@ -91,6 +106,27 @@ if [ -s "$missing" ]; then
     sed 's/^/  /' "$missing"
   } >> "$reject_report"
 fi
+
+case "$hermetic" in
+  1)
+    awk -v baseline="$hermetic_baseline_regex" '
+      NR == FNR { providers[$0] = 1; next }
+      $0 ~ baseline { next }
+      !($0 in providers) { print }
+    ' "$providers" "$actual" > "$unresolved"
+    if [ -s "$unresolved" ]; then
+      {
+        printf 'non-hermetic NEEDED libraries:\n'
+        sed 's/^/  /' "$unresolved"
+      } >> "$reject_report"
+    fi
+    ;;
+  0)
+    ;;
+  *)
+    fail "unknown WFX_WATERFOX_HERMETIC=$hermetic; expected 0 or 1"
+    ;;
+esac
 
 if [ -s "$reject_report" ]; then
   cat "$reject_report" >&2

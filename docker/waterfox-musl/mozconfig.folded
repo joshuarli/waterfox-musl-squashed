@@ -3,8 +3,10 @@
 . /work/docker/waterfox-musl/mozconfig.minwayland
 
 export WFX_FONTSTACK_PREFIX=/opt/wfx/build-deps/fontstack
-export PKG_CONFIG_PATH="$WFX_FONTSTACK_PREFIX/lib/pkgconfig:$WFX_FONTSTACK_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+export WFX_WAYLANDSTACK_PREFIX=/opt/wfx/build-deps/waylandstack
+export PKG_CONFIG_PATH="$WFX_WAYLANDSTACK_PREFIX/lib/pkgconfig:$WFX_WAYLANDSTACK_PREFIX/share/pkgconfig:$WFX_FONTSTACK_PREFIX/lib/pkgconfig:$WFX_FONTSTACK_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
 export WFX_STATIC_FONT_PKG_CONFIG=1
+export WFX_STATIC_WAYLAND_PKG_CONFIG=1
 export LDFLAGS="$LDFLAGS -static-libstdc++ -static-libgcc"
 export WFX_ALLOW_STATIC_LIBSTDCXX=1
 
