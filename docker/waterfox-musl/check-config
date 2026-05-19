@@ -6,6 +6,9 @@ config=$objdir/config.status
 log=$objdir/config.log
 compile_commands=$objdir/clangd/compile_commands.json
 mode=${WFX_CONFIG_MODE:-debug}
+expect_webdriver=${WFX_CONFIG_WEBDRIVER:-0}
+expect_widget_toolkit=${WFX_CONFIG_WIDGET_TOOLKIT:-}
+expect_mimalloc_prefix=${WFX_CONFIG_MIMALLOC_PREFIX:-/opt/wfx/build-deps/mimalloc}
 
 fail() {
   printf 'wfx config check failed: %s\n' "$*" >&2
@@ -63,8 +66,12 @@ case "$mode" in
     ;;
 esac
 require_config MOZ_MIMALLOC_REPLACE 1
-require_config WFX_MIMALLOC_PREFIX /opt/wfx/build-deps/mimalloc
+require_config WFX_MIMALLOC_PREFIX "$expect_mimalloc_prefix"
 require_config MOZ_LIBCLANG_PATH /usr/lib/llvm21/lib
+
+if [ -n "$expect_widget_toolkit" ]; then
+  require_config MOZ_WIDGET_TOOLKIT "$expect_widget_toolkit"
+fi
 
 if [ "${WFX_EXPECT_FOLD_LIBS:-0}" = 1 ]; then
   require_config MOZ_FOLD_LIBS 1
@@ -73,7 +80,6 @@ fi
 reject_config_key MOZ_X11
 reject_config_key MOZ_ENABLE_DBUS
 reject_config_key NECKO_WIFI
-reject_config_key ENABLE_WEBDRIVER
 reject_config_key ENABLE_SYSTEM_EXTENSION_DIRS
 reject_config_key MOZ_AUTH_EXTENSION
 reject_config_key MOZ_GECKO_PROFILER
@@ -90,6 +96,18 @@ reject_config_key RELRHACK
 reject_config_key USE_ELF_HACK
 
 require_config_empty MOZ_WATERFOX_BLOCKER
+
+case "$expect_webdriver" in
+  1)
+    require_config ENABLE_WEBDRIVER 1
+    ;;
+  0)
+    reject_config_key ENABLE_WEBDRIVER
+    ;;
+  *)
+    fail "unknown WFX_CONFIG_WEBDRIVER=$expect_webdriver; expected 0 or 1"
+    ;;
+esac
 
 grep -Eq "^[[:space:]]*'CC_TYPE': CompilerType\\('clang'\\)," "$config" ||
   fail "target C compiler is not clang"

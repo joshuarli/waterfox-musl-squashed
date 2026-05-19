@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM alpine:latest
+FROM alpine:edge
 
 ARG EDGE_MAIN=https://dl-cdn.alpinelinux.org/alpine/edge/main
 ARG EDGE_COMMUNITY=https://dl-cdn.alpinelinux.org/alpine/edge/community

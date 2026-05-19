@@ -1,0 +1,110 @@
+#!/bin/sh
+set -eu
+
+cache=${WFX_CACHE:-/cache}
+stage=${WFX_STAGE_ROOT:-$cache/dist/minwayland-root}
+port=${WFX_WEBDRIVER_BIDI_PORT:-9222}
+timeout_seconds=${WFX_WEBDRIVER_BIDI_TIMEOUT:-30}
+dist=$cache/dist
+report=${WFX_WEBDRIVER_BIDI_REPORT:-$dist/webdriver-bidi-smoke.txt}
+saved_log=${WFX_WEBDRIVER_BIDI_LOG:-$dist/webdriver-bidi-smoke.log}
+waterfox=$stage/opt/waterfox/waterfox
+
+fail() {
+  printf 'wfx webdriver bidi smoke failed: %s\n' "$*" >&2
+  if [ -n "${log:-}" ] && [ -f "$log" ]; then
+    sed -n '1,160p' "$log" >&2
+  fi
+  exit 1
+}
+
+[ -x "$waterfox" ] || fail "missing executable $waterfox"
+command -v nc >/dev/null 2>&1 || fail "missing nc"
+
+mkdir -p "$dist"
+tmp=$(mktemp -d)
+profile=$tmp/profile
+log=$tmp/waterfox.log
+response=$tmp/handshake.response
+mkdir -p "$profile"
+
+cat > "$profile/user.js" <<'EOF'
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.startup.homepage_override.mstone", "ignore");
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("remote.active-protocols", 1);
+user_pref("toolkit.telemetry.enabled", false);
+user_pref("waterfox.blocker.enabled", false);
+user_pref("waterfox.blocker.remoteResourcesEnabled", false);
+user_pref("waterfox.blocker.ui.enabled", false);
+EOF
+
+cleanup() {
+  if [ -n "${pid:-}" ] && kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    sleep 1
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -9 "$pid" 2>/dev/null || true
+    fi
+    wait "$pid" 2>/dev/null || true
+  fi
+  rm -rf "$tmp"
+}
+trap cleanup EXIT INT TERM
+
+export LD_LIBRARY_PATH="$stage/opt/waterfox:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export MOZ_HEADLESS=1
+unset DISPLAY
+unset WAYLAND_DISPLAY
+unset MOZ_ENABLE_WAYLAND
+
+"$waterfox" \
+  --headless \
+  --no-remote \
+  --profile "$profile" \
+  --remote-debugging-port "$port" \
+  about:blank >"$log" 2>&1 &
+pid=$!
+
+i=0
+while [ "$i" -lt "$timeout_seconds" ]; do
+  if ! kill -0 "$pid" 2>/dev/null; then
+    wait "$pid" 2>/dev/null || true
+    fail "Waterfox exited before WebDriver BiDi answered"
+  fi
+
+  if {
+    printf 'GET /session HTTP/1.1\r\n'
+    printf 'Host: 127.0.0.1:%s\r\n' "$port"
+    printf 'Upgrade: websocket\r\n'
+    printf 'Connection: Upgrade\r\n'
+    printf 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n'
+    printf 'Sec-WebSocket-Version: 13\r\n'
+    printf '\r\n'
+  } | nc -w 2 127.0.0.1 "$port" > "$response" 2>/dev/null; then
+    if grep -q '101 Switching Protocols' "$response" &&
+       grep -qi 'Sec-WebSocket-Accept:' "$response"; then
+      break
+    fi
+  fi
+
+  i=$((i + 1))
+  sleep 1
+done
+
+if [ "$i" -ge "$timeout_seconds" ]; then
+  fail "timed out waiting for WebDriver BiDi WebSocket handshake"
+fi
+
+cp "$log" "$saved_log"
+
+{
+  printf 'result=pass\n'
+  printf 'waterfox=%s\n' "$waterfox"
+  printf 'port=%s\n' "$port"
+  printf 'endpoint=/session\n'
+  printf 'handshake_status=101 Switching Protocols\n'
+  printf 'log=%s\n' "$saved_log"
+} > "$report"
+
+printf 'WebDriver BiDi smoke passed: %s\n' "$report"

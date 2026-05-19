@@ -40,6 +40,8 @@ when adapting musl or packaging fixes.
 - `docker/waterfox-musl/mozconfig.minwayland` configures
   `--enable-default-toolkit=cairo-minwayland`, producing
   `MOZ_WIDGET_TOOLKIT=minwayland`.
+- WebDriver BiDi is enabled for minwayland through Gecko's Remote Agent.
+  `geckodriver` remains disabled.
 - `configure-minwayland`, `build-minwayland`, and `package-minwayland` pass for
   the debug/dev path.
 - The minwayland staged artifact scans cleanly against
@@ -98,6 +100,12 @@ Package minwayland Waterfox and run static dependency checks:
 
 ```sh
 WFX_JOBS=8 WFX_CARGO_JOBS=8 docker/waterfox-musl/wfx-musl package-minwayland
+```
+
+Run the lightweight headless WebDriver BiDi smoke:
+
+```sh
+docker/waterfox-musl/wfx-musl smoke-webdriver-bidi
 ```
 
 Build the QEMU image from the minwayland staged root:
@@ -237,6 +245,7 @@ Important minwayland choices:
 - `--enable-rust-debug`
 - `--disable-printing`
 - `--disable-webmidi-midir`
+- WebDriver BiDi enabled; `--disable-geckodriver` remains set.
 - `--enable-mimalloc-replace`
 - `--with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc`
 - `--disable-waterfox-blocker`
@@ -547,3 +556,4 @@ Before calling minwayland work complete, verify the relevant subset:
   screenshots.
 - Clipboard changes pass both guest `wl-copy -> Waterfox paste` and Waterfox
   copy -> guest `wl-paste` repros.
+- WebDriver BiDi changes pass `smoke-webdriver-bidi`.

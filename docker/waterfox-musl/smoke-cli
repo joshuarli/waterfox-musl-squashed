@@ -1,0 +1,41 @@
+#!/bin/sh
+set -eu
+
+cache=${WFX_CACHE:-/cache}
+stage=${WFX_STAGE_ROOT:-$cache/dist/minwayland-root}
+dist=$cache/dist
+report=${WFX_CLI_SMOKE_REPORT:-$dist/waterfox-cli-smoke.txt}
+waterfox=$stage/opt/waterfox/waterfox
+
+fail() {
+  printf 'wfx cli smoke failed: %s\n' "$*" >&2
+  if [ -n "${log:-}" ] && [ -f "$log" ]; then
+    sed -n '1,120p' "$log" >&2
+  fi
+  exit 1
+}
+
+[ -x "$waterfox" ] || fail "missing executable $waterfox"
+
+mkdir -p "$dist"
+tmp=$(mktemp -d)
+log=$tmp/waterfox-help.log
+trap 'rm -rf "$tmp"' EXIT INT TERM
+
+export LD_LIBRARY_PATH="$stage/opt/waterfox:$stage/opt/wfx/sysroot/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export MOZ_CRASHREPORTER_DISABLE=1
+
+if ! "$waterfox" --help > "$log" 2>&1; then
+  fail "waterfox --help exited nonzero"
+fi
+
+{
+  printf 'result=pass\n'
+  printf 'waterfox=%s\n' "$waterfox"
+  printf 'command=waterfox --help\n'
+  printf 'ld_library_path=%s\n' "$LD_LIBRARY_PATH"
+  printf '\n[output]\n'
+  sed -n '1,120p' "$log"
+} > "$report"
+
+printf 'CLI smoke passed: %s\n' "$report"

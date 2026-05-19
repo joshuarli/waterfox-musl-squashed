@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Build Waterfox Musl Minwayland
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-minwayland-release-x64:
+    name: x86_64 musl minwayland release
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      SCCACHE_GHA_VERSION: waterfox-musl-minwayland-x64-v1
+      WFX_DOCKER_PLATFORM: linux/amd64
+      WFX_IMAGE: waterfox-musl:edge-clang22
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Install sccache
+        uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Restore Waterfox musl cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            .wfx-cache/apk
+            .wfx-cache/build-deps
+            .wfx-cache/cargo
+            .wfx-cache/mozbuild
+            .wfx-cache/sources
+          key: waterfox-musl-minwayland-x64-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            waterfox-musl-minwayland-x64-${{ runner.os }}-
+
+      - name: Build toolchain image
+        uses: docker/build-push-action@v7
+        with:
+          context: docker/waterfox-musl
+          file: docker/waterfox-musl/Dockerfile
+          platforms: linux/amd64
+          load: true
+          tags: waterfox-musl:edge-clang22
+          cache-from: type=gha,scope=waterfox-musl-toolchain-amd64
+          cache-to: type=gha,scope=waterfox-musl-toolchain-amd64,mode=max
+
+      - name: Build Waterfox
+        shell: bash
+        run: |
+          jobs="$(nproc)"
+          WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
+            docker/waterfox-musl/wfx-musl build-minwayland-release-x64
+
+      - name: Package Waterfox
+        shell: bash
+        run: |
+          jobs="$(nproc)"
+          WFX_JOBS="$jobs" WFX_CARGO_JOBS="$jobs" \
+            docker/waterfox-musl/wfx-musl package-minwayland-release-x64
+
+      - name: Verify gzip artifact
+        shell: bash
+        run: |
+          artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland-release-x64.tar.gz' | sort | tail -n 1)"
+          test -n "$artifact"
+          file "$artifact" | grep -qi 'gzip compressed data'
+          tar -tzf "$artifact" >/dev/null
+
+      - name: Upload Waterfox musl minwayland artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: waterfox-musl-minwayland-x64
+          if-no-files-found: error
+          path: |
+            .wfx-cache/dist/waterfox-*.stage1-minwayland-release-x64.tar.gz
+            .wfx-cache/dist/waterfox-*.manifest.txt
+            .wfx-cache/dist/waterfox-*.deps.txt
+            .wfx-cache/dist/waterfox-*.needed.txt
+            .wfx-cache/dist/waterfox-*.rejected-deps.txt
+            .wfx-cache/dist/waterfox-*.cli-smoke.txt

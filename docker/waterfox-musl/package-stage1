@@ -12,13 +12,14 @@ version=${WFX_STAGE1_VERSION:-}
 date_utc=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 readelf=${READELF:-/usr/lib/llvm22/bin/llvm-readelf}
 artifact_suffix=${WFX_STAGE_ARTIFACT_SUFFIX:-minwayland}
+artifact_ext=${WFX_STAGE_ARTIFACT_EXT:-tar.xz}
 
 mkdir -p "$dist"
 
 if [ -z "$package" ]; then
   package=$(find "$objdir/dist" -maxdepth 1 -type f \
-    \( -name 'waterfox-*.linux-musl-aarch64.tar.xz' -o \
-       -name 'waterfox-*.linux-musl-aarch64.tar.gz' \) | sort | tail -n 1)
+    \( -name 'waterfox-*.linux-musl-*.tar.xz' -o \
+       -name 'waterfox-*.linux-musl-*.tar.gz' \) | sort | tail -n 1)
 fi
 
 if [ -z "$package" ] || [ ! -f "$package" ]; then
@@ -88,7 +89,8 @@ scan_report=$dist/$version.deps.txt
 reject_report=$dist/$version.rejected-deps.txt
 needed_report=$dist/$version.needed.txt
 manifest=$dist/$version.manifest.txt
-artifact=${WFX_STAGE_ARTIFACT:-$dist/$version.stage1-$artifact_suffix.tar.xz}
+cli_smoke_report=$dist/$version.cli-smoke.txt
+artifact=${WFX_STAGE_ARTIFACT:-$dist/$version.stage1-$artifact_suffix.$artifact_ext}
 dep_summary=$(WFX_STAGE_ROOT="$stage" \
   WFX_WATERFOX_ALLOW_ALSA="${WFX_WATERFOX_ALLOW_ALSA:-${WFX_PACKAGE_ALSA:-0}}" \
   WFX_WATERFOX_DEPS_REPORT="$scan_report" \
@@ -97,10 +99,28 @@ dep_summary=$(WFX_STAGE_ROOT="$stage" \
   "$repo_root/docker/waterfox-musl/check-waterfox-deps")
 elf_count=$(printf '%s\n' "$dep_summary" | awk -F= '$1 == "elf_count" { print $2 }')
 
-tar -C "$stage" -cJf "$artifact" opt usr
+if [ "${WFX_PACKAGE_CLI_SMOKE:-0}" = 1 ]; then
+  WFX_STAGE_ROOT="$stage" \
+    WFX_CLI_SMOKE_REPORT="$cli_smoke_report" \
+    "$repo_root/docker/waterfox-musl/smoke-cli"
+fi
+
+case "$artifact_ext" in
+  tar.xz)
+    tar -C "$stage" -cJf "$artifact" opt usr
+    ;;
+  tar.gz)
+    tar -C "$stage" -cf - opt usr | gzip -c > "$artifact"
+    ;;
+  *)
+    printf 'unsupported WFX_STAGE_ARTIFACT_EXT=%s; expected tar.xz or tar.gz\n' "$artifact_ext" >&2
+    exit 1
+    ;;
+esac
 
 {
   printf 'artifact=%s\n' "$artifact"
+  printf 'artifact_ext=%s\n' "$artifact_ext"
   printf 'source_package=%s\n' "$package"
   printf 'build_date_utc=%s\n' "$date_utc"
   printf 'waterfox_git_commit=%s\n' "$(git -C "$repo_root" rev-parse HEAD)"
@@ -117,6 +137,9 @@ tar -C "$stage" -cJf "$artifact" opt usr
   printf 'dependency_scan=%s\n' "$scan_report"
   printf 'needed_libraries=%s\n' "$needed_report"
   printf 'rejected_dependency_scan=%s\n' "$reject_report"
+  if [ "${WFX_PACKAGE_CLI_SMOKE:-0}" = 1 ]; then
+    printf 'cli_smoke=%s\n' "$cli_smoke_report"
+  fi
   printf '\n[mozconfig]\n'
   cat "$MOZCONFIG"
   printf '\n[apk]\n'

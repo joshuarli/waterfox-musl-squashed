@@ -18,38 +18,44 @@ export MOZBUILD_STATE_PATH=/cache/mozbuild
 export SCCACHE_DIR=/cache/sccache
 export CARGO_HOME=/cache/cargo
 export CARGO_BUILD_JOBS="${WFX_CARGO_JOBS:-4}"
-export RUSTC_OPT_LEVEL=0
-export CFLAGS="-O0 -g0 -w"
-export CXXFLAGS="-O0 -g0 -w"
+export CFLAGS="-O2 -g0 -w"
+export CXXFLAGS="-O2 -g0 -w"
 export LDFLAGS="-fuse-ld=mold -Wl,--pack-dyn-relocs=none"
 
 mk_add_options AUTOCLOBBER=1
-mk_add_options MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-minwayland
+mk_add_options MOZ_OBJDIR=/cache/obj-x86_64-alpine-linux-musl-minwayland-release
 mk_add_options MOZ_MAKE_FLAGS="-j${WFX_JOBS:-4}"
 
-ac_add_options --host=aarch64-alpine-linux-musl
-ac_add_options --target=aarch64-alpine-linux-musl
+ac_add_options --host=x86_64-alpine-linux-musl
+ac_add_options --target=x86_64-alpine-linux-musl
 ac_add_options --enable-application=browser
 ac_add_options --enable-default-toolkit=cairo-minwayland
 ac_add_options --enable-linker=mold
 ac_add_options --with-ccache=sccache
 ac_add_options --with-libclang-path=/usr/lib/llvm21/lib
 
+ac_add_options --enable-release
+ac_add_options --disable-debug
+ac_add_options --enable-optimize=-O2
+ac_add_options --disable-debug-symbols
+ac_add_options --disable-rust-debug
+ac_add_options --disable-gecko-profiler
+
 ac_add_options --disable-crashreporter
-ac_add_options --enable-debug
 ac_add_options --disable-elf-hack
 ac_add_options --disable-packed-relative-relocs
 ac_add_options --disable-dmd
 ac_add_options --disable-geckodriver
-ac_add_options --disable-gecko-profiler
 ac_add_options --disable-profiling
 ac_add_options --disable-system-extension-dirs
 ac_add_options --disable-tests
 ac_add_options --disable-universalchardet
 ac_add_options --disable-updater
 ac_add_options --disable-waterfox-blocker
+ac_add_options --disable-webdriver
 ac_add_options --disable-zipwriter
 
+ac_add_options --disable-dbus
 ac_add_options --disable-necko-wifi
 ac_add_options --disable-negotiateauth
 ac_add_options --disable-webrtc
@@ -62,13 +68,12 @@ ac_add_options --disable-v4l2
 ac_add_options --disable-av1
 ac_add_options --disable-jxl
 ac_add_options --without-wasm-sandboxed-libraries
-ac_add_options --disable-optimize
-ac_add_options --enable-rust-debug
+ac_add_options --disable-parental-controls
 
 ac_add_options --enable-audio-backends=none
 ac_add_options --disable-webmidi-midir
 ac_add_options --enable-mimalloc-replace
-ac_add_options --with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc
+ac_add_options --with-mimalloc-prefix=/opt/wfx/build-deps/mimalloc-x86_64
 
 ac_add_options --with-app-basename=Waterfox
 ac_add_options --with-app-name=waterfox
