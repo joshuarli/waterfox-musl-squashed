@@ -133,8 +133,11 @@ if not CONFIG['MOZ_FFVPX_AUDIOONLY']:
     else:
         USE_LIBS += [
             'dav1d',
-            'media_libdav1d_asm',
         ]
+        if CONFIG['MOZ_DAV1D_ASM']:
+            USE_LIBS += [
+                'media_libdav1d_asm',
+            ]
 
     if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
         LOCAL_INCLUDES += ['/media/mozva']

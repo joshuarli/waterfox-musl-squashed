@@ -2202,7 +2202,8 @@ static void DumpHelp() {
          (const char*)gAppData->name);
 #endif
 
-#if defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || defined(XP_MACOSX)
+#if defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_MINWAYLAND) || \
+    defined(XP_MACOSX)
   printf("  --headless         Run without a GUI.\n");
 #endif
 
@@ -4091,7 +4092,8 @@ int XREMain::XRE_mainInit(bool* aExitFlag) {
   }
 
   if (gfxPlatform::IsHeadless()) {
-#if defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || defined(XP_MACOSX)
+#if defined(XP_WIN) || defined(MOZ_WIDGET_GTK) || defined(MOZ_WIDGET_MINWAYLAND) || \
+    defined(XP_MACOSX)
     printf_stderr("*** You are running in headless mode.\n");
 #else
     Output(
