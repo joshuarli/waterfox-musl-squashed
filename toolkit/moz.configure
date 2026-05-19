@@ -847,6 +847,10 @@ set_define("MOZ_PDF_PRINTING", pdf_printing)
 # Fontconfig Freetype
 # ==============================================================
 option(env="USE_FC_FREETYPE", help="Force-enable the use of fontconfig freetype")
+option(
+    env="WFX_STATIC_FONT_PKG_CONFIG",
+    help="Use pkg-config --static for Waterfox musl fontconfig/freetype experiments",
+)
 
 
 @depends("USE_FC_FREETYPE", toolkit)
@@ -857,6 +861,14 @@ def fc_freetype(value, toolkit):
 
 set_define("USE_FC_FREETYPE", fc_freetype)
 
+
+@depends("WFX_STATIC_FONT_PKG_CONFIG")
+def static_font_pkg_config(value):
+    return bool(value)
+
+
+set_config("WFX_STATIC_FONT_PKG_CONFIG", static_font_pkg_config)
+
 # Pango
 # ==============================================================
 pkg_check_modules("MOZ_PANGO", "pango >= 1.22.0", when=toolkit_gtk)
@@ -864,7 +876,10 @@ pkg_check_modules("MOZ_PANGO", "pango >= 1.22.0", when=toolkit_gtk)
 # Fontconfig
 # ==============================================================
 fontconfig_info = pkg_check_modules(
-    "_FONTCONFIG", "fontconfig >= 2.7.0", when=fc_freetype
+    "_FONTCONFIG",
+    "fontconfig >= 2.7.0",
+    when=fc_freetype,
+    static=static_font_pkg_config,
 )
 
 
@@ -876,7 +891,10 @@ def check_for_freetype2(fc_freetype):
 
 # Check for freetype2. Flags are combined with fontconfig flags.
 freetype2_info = pkg_check_modules(
-    "_FT2", "freetype2 >= 9.10.3", when=check_for_freetype2
+    "_FT2",
+    "freetype2 >= 9.10.3",
+    when=check_for_freetype2,
+    static=static_font_pkg_config,
 )
 
 

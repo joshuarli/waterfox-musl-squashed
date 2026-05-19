@@ -113,6 +113,7 @@ def pkg_check_modules(
     allow_missing=False,
     config=True,
     cflags_only=False,
+    static=False,
 ):
     @depends(dependable(package_desc), when=when)
     def package_desc(desc):
@@ -192,17 +193,22 @@ def pkg_check_modules(
             return namespace(cflags=cflags)
 
     else:
+        static = dependable(static)
 
         @depends(
             pkg_config,
             pkg_config_env,
             package_desc,
             pkg_config_base_flags,
+            static,
             when=package,
         )
         @checking("%s_LIBS" % var, callback=lambda t: " ".join(t))
-        def pkg_libs(pkg_config, env, package_desc, base_flags):
-            args = list(base_flags) + ["--libs", package_desc]
+        def pkg_libs(pkg_config, env, package_desc, base_flags, static):
+            args = [flag for flag in base_flags if not static or flag != "--shared"]
+            if static:
+                args.append("--static")
+            args += ["--libs", package_desc]
             libs = check_cmd_output(pkg_config, *args, env=env)
             # Remove evil flags like -Wl,--export-dynamic
             return tuple(libs.replace("-Wl,--export-dynamic", "").split())

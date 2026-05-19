@@ -84,14 +84,16 @@ Rollback:
 
 ## Phase 2: Package Policy Cleanup
 
-Do this only after Phase 1 passes QEMU.
+Status: implemented for the folded debug path.
 
 Tasks:
-- Update `~/d/kominka/xsh/laputa/WATERFOX.md` so `gcc-runtime` is conditional or removed
-  for the folded debug artifact.
-- Keep QEMU rootfs package cleanup separate from Waterfox artifact cleanup,
-  because the compositor may still need Alpine GCC runtime packages.
-- Record the folded artifact path and dependency report in the manifest.
+- Treat `.wfx-cache/dist/folded-root` as a first-class staged root through
+  `package-folded`, `smoke-webdriver-bidi-folded`, and `qemu-image-folded`.
+- Keep QEMU rootfs cleanup separate from Waterfox artifact cleanup. The
+  compositor may still need Alpine GCC runtime packages even when Waterfox does
+  not.
+- Record the folded artifact path, dependency report, and mozconfig in the
+  manifest through `package-stage1`.
 
 Validation:
 - Compare folded and non-folded `*.needed.txt` reports.
@@ -100,20 +102,30 @@ Validation:
 
 ## Phase 3: Static Font Stack
 
-Candidates:
-- `libfontconfig.so.1`
-- `libfreetype.so.6`
+Status: active implementation target.
 
-Only attempt this after Phase 1 is stable. These libraries are plausible
-because they are direct Waterfox dependencies, but static-linking them does not
-remove the need for font data, fontconfig config, and a cache strategy.
+Scope:
+- Build a static-only font stack for the folded experiment under
+  `/opt/wfx/build-deps/fontstack`.
+- Static archives: zlib, expat, freetype, and fontconfig.
+- Prefix the private static expat symbols used by fontconfig so they do not
+  collide with Gecko's built-in expat.
+- Use pkg-config `--static` only for fontconfig/freetype checks. Do not apply
+  static pkg-config globally, because Wayland and xkbcommon remain phase 4.
+- Keep runtime font files and fontconfig configuration in the QEMU image.
 
-Required design work:
-- Decide whether the sysroot builds static and shared variants or static-only
-  variants for the experiment.
-- Preserve explicit runtime handling for fonts and fontconfig configuration.
-- Keep package scans strict so static linking does not hide an accidental GTK,
-  GLib, X11, DBus, or Vulkan path.
+Expected result:
+- `libfontconfig.so.1` disappears from folded staged Waterfox `DT_NEEDED`.
+- `libfreetype.so.6` disappears from folded staged Waterfox `DT_NEEDED`.
+- Package scans continue to reject GTK, GLib, X11, DBus, Vulkan, ALSA, and
+  dynamic mimalloc.
+
+Validation:
+- `configure-folded` passes and records the fontstack library path in
+  `FT2_LIBS`.
+- `package-folded` passes using `waterfox-minwayland-folded-allowed-needed.txt`.
+- `smoke-webdriver-bidi-folded` passes.
+- `qemu-image-folded` rebuilds from `.wfx-cache/dist/folded-root`.
 
 ## Phase 4: Static Wayland Client Pieces
 

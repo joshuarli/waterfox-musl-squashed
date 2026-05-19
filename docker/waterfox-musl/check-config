@@ -10,6 +10,7 @@ expect_webdriver=${WFX_CONFIG_WEBDRIVER:-0}
 expect_widget_toolkit=${WFX_CONFIG_WIDGET_TOOLKIT:-}
 expect_mimalloc_prefix=${WFX_CONFIG_MIMALLOC_PREFIX:-/opt/wfx/build-deps/mimalloc}
 expect_static_gcc_runtime=${WFX_EXPECT_STATIC_GCC_RUNTIME:-0}
+expect_static_font_stack=${WFX_EXPECT_STATIC_FONT_STACK:-0}
 
 fail() {
   printf 'wfx config check failed: %s\n' "$*" >&2
@@ -90,6 +91,33 @@ case "$expect_static_gcc_runtime" in
     ;;
   *)
     fail "unknown WFX_EXPECT_STATIC_GCC_RUNTIME=$expect_static_gcc_runtime; expected 0 or 1"
+    ;;
+esac
+
+case "$expect_static_font_stack" in
+  1)
+    require_config WFX_STATIC_FONT_PKG_CONFIG 1
+    grep -Eq -- "build-deps/fontstack/lib" "$config" ||
+      fail "font stack library path was not configured"
+    awk '
+      $0 ~ "'\''FT2_LIBS'\'':" { in_list = 1; saw = 1 }
+      in_list && $0 ~ "'\''-lfontconfig'\''" { found = 1 }
+      in_list && $0 ~ /\],/ { in_list = 0 }
+      END { if (!saw || !found) exit 1 }
+    ' "$config" ||
+      fail "fontconfig was not included in FT2_LIBS"
+    awk '
+      $0 ~ "'\''_FONTCONFIG_LIBS'\'':" { in_list = 1; saw = 1 }
+      in_list && $0 ~ "'\''-lfontconfig'\''" { found = 1 }
+      in_list && $0 ~ /\],/ { in_list = 0 }
+      END { if (!saw || !found) exit 1 }
+    ' "$config" ||
+      fail "static font pkg-config mode was not configured"
+    ;;
+  0)
+    ;;
+  *)
+    fail "unknown WFX_EXPECT_STATIC_FONT_STACK=$expect_static_font_stack; expected 0 or 1"
     ;;
 esac
 

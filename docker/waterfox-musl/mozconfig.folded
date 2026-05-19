@@ -2,6 +2,9 @@
 
 . /work/docker/waterfox-musl/mozconfig.minwayland
 
+export WFX_FONTSTACK_PREFIX=/opt/wfx/build-deps/fontstack
+export PKG_CONFIG_PATH="$WFX_FONTSTACK_PREFIX/lib/pkgconfig:$WFX_FONTSTACK_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+export WFX_STATIC_FONT_PKG_CONFIG=1
 export LDFLAGS="$LDFLAGS -static-libstdc++ -static-libgcc"
 export WFX_ALLOW_STATIC_LIBSTDCXX=1
 

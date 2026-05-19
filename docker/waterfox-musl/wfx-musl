@@ -36,6 +36,8 @@ commands:
                     Package the experimental minimal Wayland widget backend.
   smoke-webdriver-bidi
                     Verify staged Waterfox exposes the WebDriver BiDi endpoint.
+  smoke-webdriver-bidi-folded
+                    Verify folded staged Waterfox exposes the WebDriver BiDi endpoint.
   smoke-webdriver-bidi-minwayland-release-x64
                     Verify staged x86_64 release Waterfox exposes WebDriver BiDi.
   smoke-webdriver-bidi-minwayland-release-arm64
@@ -76,6 +78,8 @@ commands:
   qemu-image        Assemble the QEMU Alpine aarch64 kiosk rootfs image.
   qemu-image-minwayland
                     Assemble QEMU image from the minimal Wayland widget root.
+  qemu-image-folded
+                    Assemble QEMU image from the folded minimal Wayland widget root.
   qemu-run          Boot the QEMU visible kiosk proof.
   qemu-audio        Boot QEMU, capture Waterfox audio to WAV, and verify it.
 EOF
@@ -400,6 +404,9 @@ case "$command" in
   smoke-webdriver-bidi)
     run_minwayland_in_image /work/docker/waterfox-musl/smoke-webdriver-bidi
     ;;
+  smoke-webdriver-bidi-folded)
+    run_folded_in_image sh -euc 'WFX_STAGE_ROOT=/cache/dist/folded-root WFX_WEBDRIVER_BIDI_REPORT=/cache/dist/waterfox-folded.webdriver-bidi-smoke.txt WFX_WEBDRIVER_BIDI_LOG=/cache/dist/waterfox-folded.webdriver-bidi-smoke.log /work/docker/waterfox-musl/smoke-webdriver-bidi'
+    ;;
   smoke-webdriver-bidi-minwayland-release-x64)
     run_minwayland_release_x64_in_image sh -euc 'WFX_STAGE_ROOT=/cache/dist/minwayland-release-x64-root WFX_WEBDRIVER_BIDI_REPORT=/cache/dist/waterfox-minwayland-release-x64.webdriver-bidi-smoke.txt WFX_WEBDRIVER_BIDI_LOG=/cache/dist/waterfox-minwayland-release-x64.webdriver-bidi-smoke.log /work/docker/waterfox-musl/smoke-webdriver-bidi'
     ;;
@@ -449,13 +456,13 @@ case "$command" in
     run_release_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-release WFX_STAGE_ROOT=/cache/dist/release-root WFX_STAGE_ARTIFACT_SUFFIX=release WFX_WATERFOX_ALLOW_GTK=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   configure-folded)
-    run_folded_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded WFX_CONFIG_WEBDRIVER=1 WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_EXPECT_STATIC_GCC_RUNTIME=1 /work/docker/waterfox-musl/check-config'
+    run_folded_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/fontstack /work/docker/waterfox-musl/build-sysroot build-fontstack-static && WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded WFX_CONFIG_WEBDRIVER=1 WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_EXPECT_STATIC_GCC_RUNTIME=1 WFX_EXPECT_STATIC_FONT_STACK=1 /work/docker/waterfox-musl/check-config'
     ;;
   build-folded)
-    run_folded_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded WFX_CONFIG_WEBDRIVER=1 WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_EXPECT_STATIC_GCC_RUNTIME=1 /work/docker/waterfox-musl/check-config && ./mach build'
+    run_folded_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/fontstack /work/docker/waterfox-musl/build-sysroot build-fontstack-static && WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded WFX_CONFIG_WEBDRIVER=1 WFX_CONFIG_WIDGET_TOOLKIT=minwayland WFX_EXPECT_STATIC_GCC_RUNTIME=1 WFX_EXPECT_STATIC_FONT_STACK=1 /work/docker/waterfox-musl/check-config && ./mach build'
     ;;
   package-folded)
-    run_folded_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded WFX_STAGE_ROOT=/cache/dist/folded-root WFX_STAGE_ARTIFACT_SUFFIX=folded WFX_PACKAGE_CLI_SMOKE=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-minwayland-static-runtime-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
+    run_folded_in_image sh -euc './mach package && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded WFX_STAGE_ROOT=/cache/dist/folded-root WFX_STAGE_ARTIFACT_SUFFIX=folded WFX_PACKAGE_CLI_SMOKE=1 WFX_WATERFOX_ALLOWED_NEEDED=/work/docker/waterfox-musl/waterfox-minwayland-folded-allowed-needed.txt /work/docker/waterfox-musl/package-stage1'
     ;;
   configure-folded-release)
     run_folded_release_in_image sh -euc 'WFX_SYSROOT=/opt/wfx/build-deps/mimalloc /work/docker/waterfox-musl/build-sysroot build-mimalloc && ./mach configure && MOZ_OBJDIR=/cache/obj-aarch64-alpine-linux-musl-folded-release WFX_CONFIG_MODE=release WFX_EXPECT_FOLD_LIBS=1 /work/docker/waterfox-musl/check-config'
@@ -480,6 +487,9 @@ case "$command" in
     ;;
   qemu-image-minwayland)
     run_in_image sh -euc '/work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
+    ;;
+  qemu-image-folded)
+    run_in_image sh -euc 'export WFX_STAGE_ROOT=/cache/dist/folded-root; /work/docker/waterfox-musl/build-kiosk-compositor build && /work/docker/waterfox-musl/qemu-image build'
     ;;
   qemu-run)
     "$script_dir/qemu-run"

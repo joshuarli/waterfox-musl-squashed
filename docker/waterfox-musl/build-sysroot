@@ -8,6 +8,7 @@ lock=${WFX_SOURCES_LOCK:-$repo_root/docker/waterfox-musl/sources.lock}
 sources=$cache/sources
 build_root=$cache/build/sysroot
 jobs=${JOBS:-$(nproc)}
+static_only=${WFX_SYSROOT_STATIC_ONLY:-0}
 
 mkdir -p "$sources" "$build_root" "$prefix" "$prefix/.wfx-stamps"
 
@@ -89,9 +90,13 @@ unpack_source() {
 }
 
 stamp_path() {
-  local name=$1 version
+  local name=$1 version stamp_name
+  stamp_name=$name
+  if [ "$static_only" = 1 ]; then
+    stamp_name=$stamp_name-static
+  fi
   version=$(source_version "$name")
-  printf '%s/.wfx-stamps/%s-%s\n' "$prefix" "$name" "$version"
+  printf '%s/.wfx-stamps/%s-%s\n' "$prefix" "$stamp_name" "$version"
 }
 
 already_built() {
@@ -130,6 +135,14 @@ meson_build_install() {
   LD_LIBRARY_PATH="$sysroot_ld_path" meson install --no-rebuild -C "$dir/$build"
 }
 
+library_mode() {
+  if [ "$static_only" = 1 ]; then
+    printf 'static\n'
+  else
+    printf 'shared\n'
+  fi
+}
+
 clean_sysroot() {
   rm -rf \
     "$prefix/share/doc" \
@@ -145,12 +158,16 @@ clean_sysroot() {
 }
 
 build_zlib() {
-  local dir
+  local dir zlib_flags=()
   already_built zlib && return 0
   fetch_source zlib
   dir=$(unpack_source zlib)
   cd "$dir"
+  if [ "$static_only" = 1 ]; then
+    zlib_flags+=(--static)
+  fi
   CHOST=aarch64-unknown-linux-musl ./configure \
+    "${zlib_flags[@]}" \
     --prefix="$prefix" \
     --libdir="$prefix/lib"
   run_make_install
@@ -158,22 +175,58 @@ build_zlib() {
 }
 
 build_expat() {
-  local dir
+  local dir library_flags
   already_built expat && return 0
   fetch_source expat
   dir=$(unpack_source expat)
   cd "$dir"
+  if [ "$static_only" = 1 ]; then
+    library_flags=(--enable-static --disable-shared)
+  else
+    library_flags=(--disable-static --enable-shared)
+  fi
   ./configure \
     --prefix="$prefix" \
     --libdir="$prefix/lib" \
-    --disable-static \
-    --enable-shared \
+    "${library_flags[@]}" \
     --without-xmlwf \
     --without-examples \
     --without-tests \
     --without-docbook
   run_make_install
   mark_built expat
+}
+
+prefix_expat_symbols() {
+  local archive header map
+  archive=$prefix/lib/libexpat.a
+  header=$prefix/include/wfx-expat-prefix.h
+  map=$(mktemp)
+
+  if "$NM" -g --defined-only "$archive" | awk '$3 ~ /^wfxfc_XML_/ { found = 1 } END { exit found ? 0 : 1 }' &&
+     [ -f "$header" ]; then
+    rm -f "$map"
+    return 0
+  fi
+
+  "$NM" -g --defined-only "$archive" |
+    awk '$3 ~ /^(XML_|g_reparse)/ && $3 !~ /^wfxfc_/ { print $3 " wfxfc_" $3 }' > "$map"
+  if [ ! -s "$map" ]; then
+    rm -f "$map"
+    printf 'no expat symbols found to prefix in %s\n' "$archive" >&2
+    exit 1
+  fi
+
+  {
+    printf '#ifndef WFX_EXPAT_PREFIX_H\n'
+    printf '#define WFX_EXPAT_PREFIX_H\n'
+    awk '{ print "#define " $1 " " $2 }' "$map"
+    printf '#endif\n'
+  } > "$header"
+
+  "$OBJCOPY" --redefine-syms="$map" "$archive"
+  "$RANLIB" "$archive"
+  rm -f "$map"
 }
 
 build_libffi() {
@@ -253,16 +306,20 @@ build_pcre2() {
 }
 
 build_libpng() {
-  local dir
+  local dir library_flags
   already_built libpng && return 0
   fetch_source libpng
   dir=$(unpack_source libpng)
   cd "$dir"
+  if [ "$static_only" = 1 ]; then
+    library_flags=(--enable-static --disable-shared)
+  else
+    library_flags=(--disable-static --enable-shared)
+  fi
   ./configure \
     --prefix="$prefix" \
     --libdir="$prefix/lib" \
-    --disable-static \
-    --enable-shared \
+    "${library_flags[@]}" \
     --disable-tests \
     --disable-tools
   run_make_install
@@ -299,35 +356,46 @@ build_libjpeg_turbo() {
 }
 
 build_freetype() {
-  local dir
+  local dir png_mode
   already_built freetype && return 0
   fetch_source freetype
   dir=$(unpack_source freetype)
+  png_mode=enabled
+  if [ "$static_only" = 1 ]; then
+    png_mode=disabled
+  fi
   meson_build_install "$dir" build-wfx \
-    -Ddefault_library=shared \
+    -Ddefault_library="$(library_mode)" \
     -Dbrotli=disabled \
     -Dbzip2=disabled \
     -Dharfbuzz=disabled \
     -Dmmap=enabled \
-    -Dpng=enabled \
+    -Dpng="$png_mode" \
     -Dzlib=system \
     -Dtests=disabled
   mark_built freetype
 }
 
 build_fontconfig() {
-  local dir
+  local dir library_flags
   already_built fontconfig && return 0
   fetch_source fontconfig
   dir=$(unpack_source fontconfig)
   cd "$dir"
+  if [ "$static_only" = 1 ]; then
+    library_flags=(--enable-static --disable-shared)
+    export EXPAT_CFLAGS="-I$prefix/include -include $prefix/include/wfx-expat-prefix.h"
+    export EXPAT_LIBS="-L$prefix/lib -lexpat"
+    export ac_cv_func_XML_SetDoctypeDeclHandler=yes
+  else
+    library_flags=(--disable-static --enable-shared)
+  fi
   ./configure \
     --prefix="$prefix" \
     --libdir="$prefix/lib" \
     --sysconfdir="$prefix/etc" \
     --localstatedir="$prefix/var" \
-    --disable-static \
-    --enable-shared \
+    "${library_flags[@]}" \
     --disable-docs \
     --disable-docbook \
     --disable-nls \
@@ -739,6 +807,51 @@ build_initial() {
   scan_sysroot
 }
 
+clean_fontstack_static() {
+  rm -rf \
+    "$prefix/share/doc" \
+    "$prefix/share/info" \
+    "$prefix/share/locale" \
+    "$prefix/share/man"
+  rm -f "$prefix/bin/fc-"*
+  rm -f "$prefix/bin/libpng"*
+  rm -f "$prefix/lib/libpng"*
+  rm -f "$prefix/lib/pkgconfig/libpng"*
+  rm -rf "$prefix/include/libpng16"
+  rm -f "$prefix/include/png.h" "$prefix/include/pngconf.h" "$prefix/include/pnglibconf.h"
+  find "$prefix/lib" \( -type f -o -type l \) -name '*.la' -delete 2>/dev/null || true
+}
+
+scan_fontstack_static() {
+  local failed=0 archive
+  for archive in libz.a libexpat.a libfreetype.a libfontconfig.a; do
+    if [ ! -f "$prefix/lib/$archive" ]; then
+      printf 'missing static font stack archive: %s\n' "$prefix/lib/$archive" >&2
+      failed=1
+    fi
+  done
+  if find "$prefix/lib" \( -name '*.so' -o -name '*.so.*' \) -print -quit | grep -q .; then
+    find "$prefix/lib" \( -name '*.so' -o -name '*.so.*' \) -print >&2
+    failed=1
+  fi
+  PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig:$prefix/share/pkgconfig" \
+    PKG_CONFIG_PATH= \
+    pkgconf --static --libs fontconfig freetype2 >/dev/null
+  [ "$failed" -eq 0 ] || exit 1
+}
+
+build_fontstack_static() {
+  require_clang
+  static_only=1
+  build_zlib
+  build_expat
+  prefix_expat_symbols
+  build_freetype
+  build_fontconfig
+  clean_fontstack_static
+  scan_fontstack_static
+}
+
 case "${1:-build-initial}" in
   build-initial)
     build_initial
@@ -746,6 +859,9 @@ case "${1:-build-initial}" in
   build-mimalloc)
     require_clang
     build_mimalloc
+    ;;
+  build-fontstack-static)
+    build_fontstack_static
     ;;
   scan)
     clean_sysroot
@@ -756,7 +872,7 @@ case "${1:-build-initial}" in
     smoke_compile
     ;;
   *)
-    printf 'usage: build-sysroot [build-initial|build-mimalloc|scan|smoke]\n' >&2
+    printf 'usage: build-sysroot [build-initial|build-mimalloc|build-fontstack-static|scan|smoke]\n' >&2
     exit 2
     ;;
 esac
