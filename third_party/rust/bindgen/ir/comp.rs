@@ -1243,6 +1243,9 @@ impl CompInfo {
         );
 
         let mut cursor = ty.declaration();
+        if let Some(definition) = cursor.definition() {
+            cursor = definition;
+        }
         let mut kind = Self::kind_from_cursor(&cursor);
         if kind.is_err() {
             if let Some(location) = location {

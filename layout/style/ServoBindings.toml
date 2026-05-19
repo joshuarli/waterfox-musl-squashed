@@ -297,6 +297,7 @@ allowlist-types = [
     "mozilla::gfx::FontFeature",
     "mozilla::gfx::FontVariation",
     "mozilla::gfx::FontPaletteValueSet",
+    "StyleFontVariantEmoji",
     "mozilla::StyleImageLayerAttachment",
     "GeckoFontMetrics",
     "GeckoImplicitShadowRoot",

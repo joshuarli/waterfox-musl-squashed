@@ -11,10 +11,7 @@ use crate::error_reporting::ContextualParseError;
 use crate::gecko_bindings::{
     bindings::Gecko_AppendPaletteValueHashEntry,
     bindings::{Gecko_SetFontPaletteBase, Gecko_SetFontPaletteOverride},
-    structs::root::mozilla::gfx::{
-        FontPaletteValueSet, FontPaletteValueSet_PaletteValues_kDark,
-        FontPaletteValueSet_PaletteValues_kLight,
-    },
+    structs::root::mozilla::gfx::FontPaletteValueSet,
 };
 use crate::parser::{Parse, ParserContext};
 use crate::shared_lock::{SharedRwLockReadGuard, ToCssWithGuard};
@@ -32,6 +29,12 @@ use selectors::parser::SelectorParseErrorKind;
 use std::fmt::{self, Write};
 use style_traits::{Comma, OneOrMoreSeparated};
 use style_traits::{CssWriter, ParseError, StyleParseErrorKind, ToCss};
+
+// These mirror gfx::FontPaletteValueSet::PaletteValues in COLRFonts.h.
+#[cfg(feature = "gecko")]
+const FONT_PALETTE_VALUES_LIGHT: i32 = -1;
+#[cfg(feature = "gecko")]
+const FONT_PALETTE_VALUES_DARK: i32 = -2;
 
 #[allow(missing_docs)]
 #[derive(Clone, Debug, MallocSizeOf, PartialEq, ToShmem)]
@@ -180,8 +183,8 @@ impl FontPaletteValuesRule {
                     Gecko_SetFontPaletteBase(
                         palette_values,
                         match &base_palette {
-                            FontPaletteBase::Light => FontPaletteValueSet_PaletteValues_kLight,
-                            FontPaletteBase::Dark => FontPaletteValueSet_PaletteValues_kDark,
+                            FontPaletteBase::Light => FONT_PALETTE_VALUES_LIGHT,
+                            FontPaletteBase::Dark => FONT_PALETTE_VALUES_DARK,
                             FontPaletteBase::Index(i) => i.0.value() as i32,
                         },
                     );
