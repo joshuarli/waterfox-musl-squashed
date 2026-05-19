@@ -9,6 +9,19 @@ sources=$cache/sources
 build_root=$cache/build/sysroot
 jobs=${JOBS:-$(nproc)}
 static_only=${WFX_SYSROOT_STATIC_ONLY:-0}
+build_arch=${WFX_SYSROOT_ARCH:-$(apk --print-arch 2>/dev/null || uname -m)}
+case "$build_arch" in
+  aarch64|arm64)
+    host_triplet=aarch64-unknown-linux-musl
+    ;;
+  x86_64|amd64)
+    host_triplet=x86_64-unknown-linux-musl
+    ;;
+  *)
+    printf 'unsupported WFX_SYSROOT_ARCH=%s\n' "$build_arch" >&2
+    exit 2
+    ;;
+esac
 
 mkdir -p "$sources" "$build_root" "$prefix" "$prefix/.wfx-stamps"
 
@@ -166,7 +179,7 @@ build_zlib() {
   if [ "$static_only" = 1 ]; then
     zlib_flags+=(--static)
   fi
-  CHOST=aarch64-unknown-linux-musl ./configure \
+  CHOST=$host_triplet ./configure \
     "${zlib_flags[@]}" \
     --prefix="$prefix" \
     --libdir="$prefix/lib"

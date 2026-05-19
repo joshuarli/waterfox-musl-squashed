@@ -98,7 +98,7 @@ esac
 case "$expect_static_font_stack" in
   1)
     require_config WFX_STATIC_FONT_PKG_CONFIG 1
-    grep -Eq -- "build-deps/fontstack/lib" "$config" ||
+    grep -Eq -- "build-deps/fontstack[^']*/lib" "$config" ||
       fail "font stack library path was not configured"
     awk '
       $0 ~ "'\''FT2_LIBS'\'':" { in_list = 1; saw = 1 }
@@ -125,7 +125,7 @@ esac
 case "$expect_static_wayland_stack" in
   1)
     require_config WFX_STATIC_WAYLAND_PKG_CONFIG 1
-    grep -Eq -- "build-deps/waylandstack/lib" "$config" ||
+    grep -Eq -- "build-deps/waylandstack[^']*/lib" "$config" ||
       fail "Wayland stack library path was not configured"
     awk '
       $0 ~ "'\''MOZ_WAYLAND_LIBS'\'':" { in_list = 1; saw = 1 }

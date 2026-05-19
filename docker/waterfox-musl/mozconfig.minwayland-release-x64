@@ -21,7 +21,13 @@ export CARGO_BUILD_JOBS="${WFX_CARGO_JOBS:-4}"
 export RUSTFLAGS="-C target-cpu=ivybridge"
 export CFLAGS="-O2 -march=ivybridge -g0 -w"
 export CXXFLAGS="-O2 -march=ivybridge -g0 -w"
-export LDFLAGS="-fuse-ld=mold -Wl,--pack-dyn-relocs=none"
+export LDFLAGS="-fuse-ld=mold -Wl,--pack-dyn-relocs=none -static-libstdc++ -static-libgcc"
+export WFX_FONTSTACK_PREFIX=/opt/wfx/build-deps/fontstack-x86_64
+export WFX_WAYLANDSTACK_PREFIX=/opt/wfx/build-deps/waylandstack-x86_64
+export PKG_CONFIG_PATH="$WFX_WAYLANDSTACK_PREFIX/lib/pkgconfig:$WFX_WAYLANDSTACK_PREFIX/share/pkgconfig:$WFX_FONTSTACK_PREFIX/lib/pkgconfig:$WFX_FONTSTACK_PREFIX/share/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+export WFX_STATIC_FONT_PKG_CONFIG=1
+export WFX_STATIC_WAYLAND_PKG_CONFIG=1
+export WFX_ALLOW_STATIC_LIBSTDCXX=1
 
 mk_add_options AUTOCLOBBER=1
 mk_add_options MOZ_OBJDIR=/cache/obj-x86_64-alpine-linux-musl-minwayland-release
