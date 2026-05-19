@@ -43,14 +43,15 @@ class GfxInfo final : public GfxInfoBase {
   NS_IMETHOD GetAdapterDriverDate2(nsAString& aAdapterDriverDate) override;
   NS_IMETHOD GetIsGPU2Active(bool* aIsGPU2Active) override;
   NS_IMETHOD GetDrmRenderDevice(nsACString& aDrmRenderDevice) override;
-  NS_IMETHOD SpoofVendorID(const nsAString& aVendorID) override;
-  NS_IMETHOD SpoofDeviceID(const nsAString& aDeviceID) override;
-  NS_IMETHOD SpoofDriverVersion(const nsAString& aDriverVersion) override;
-  NS_IMETHOD SpoofOSVersion(uint32_t aVersion) override;
   using GfxInfoBase::GetFeatureStatus;
   using GfxInfoBase::GetFeatureSuggestedDriverVersion;
 
   nsresult Init() override;
+
+#ifdef DEBUG
+  NS_DECL_ISUPPORTS_INHERITED
+  NS_DECL_NSIGFXINFODEBUG
+#endif
 
  protected:
   ~GfxInfo() override = default;

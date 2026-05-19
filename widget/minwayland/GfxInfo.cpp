@@ -10,6 +10,10 @@
 
 namespace mozilla::widget {
 
+#ifdef DEBUG
+NS_IMPL_ISUPPORTS_INHERITED(GfxInfo, GfxInfoBase, nsIGfxInfoDebug)
+#endif
+
 nsresult GfxInfo::Init() { return GfxInfoBase::Init(); }
 
 NS_IMETHODIMP GfxInfo::GetD2DEnabled(bool* aD2DEnabled) {
@@ -157,6 +161,7 @@ NS_IMETHODIMP GfxInfo::GetDrmRenderDevice(nsACString& aDrmRenderDevice) {
   return NS_OK;
 }
 
+#ifdef DEBUG
 NS_IMETHODIMP GfxInfo::SpoofVendorID(const nsAString& aVendorID) {
   return NS_OK;
 }
@@ -171,6 +176,7 @@ NS_IMETHODIMP GfxInfo::SpoofDriverVersion(
 }
 
 NS_IMETHODIMP GfxInfo::SpoofOSVersion(uint32_t aVersion) { return NS_OK; }
+#endif
 
 const nsTArray<GfxDriverInfo>& GfxInfo::GetGfxDriverInfo() {
   if (!sDriverInfo) {
