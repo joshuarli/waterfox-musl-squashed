@@ -139,7 +139,7 @@ if not CONFIG['MOZ_FFVPX_AUDIOONLY']:
                 'media_libdav1d_asm',
             ]
 
-    if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+    if CONFIG["MOZ_ENABLE_VAAPI"]:
         LOCAL_INCLUDES += ['/media/mozva']
         SOURCES += [
             'vaapi_av1.c',

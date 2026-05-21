@@ -7,7 +7,7 @@
 
 #include "DMABufDevice.h"
 #include "DMABufFormats.h"
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 #  include "nsWaylandDisplay.h"
 #endif
 #include "base/message_loop.h"    // for MessageLoop
@@ -15,10 +15,12 @@
 #include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/StaticPrefs_media.h"
 #include "mozilla/gfx/gfxVars.h"
+#ifdef MOZ_WIDGET_GTK
 #include "WidgetUtilsGtk.h"
+#endif
 #include "gfxConfig.h"
+#include "GfxDriverInfo.h"
 #include "nsIGfxInfo.h"
-#include "GfxInfo.h"
 #include "mozilla/Components.h"
 #include "mozilla/ClearOnShutdown.h"
 

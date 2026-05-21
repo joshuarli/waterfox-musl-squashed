@@ -728,9 +728,9 @@ set_define("MOZ_WAYLAND", depends_if(wayland_headers)(lambda _: True))
 option("--disable-vaapi", default=True, help="{Enable|Disable} VAAPI support")
 
 
-@depends(toolkit_gtk, "--enable-vaapi")
-def vaapi(toolkit_gtk, enabled):
-    if toolkit_gtk and enabled:
+@depends(toolkit_gtk, toolkit_minwayland, "--enable-vaapi")
+def vaapi(toolkit_gtk, toolkit_minwayland, enabled):
+    if (toolkit_gtk or toolkit_minwayland) and enabled:
         return True
 
 
@@ -826,11 +826,11 @@ def gl_provider_define(provider):
 set_define("MOZ_GL_PROVIDER", gl_provider_define)
 
 
-@depends(gl_provider, toolkit_gtk)
-def gl_default_provider(value, toolkit_gtk):
+@depends(gl_provider, toolkit_gtk, toolkit_minwayland)
+def gl_default_provider(value, toolkit_gtk, toolkit_minwayland):
     if value:
         return value
-    elif toolkit_gtk:
+    elif toolkit_gtk or toolkit_minwayland:
         return "EGL"
 
 
@@ -851,7 +851,7 @@ set_define(gl_provider_define, True)
 # ==============================================================
 @depends(toolkit)
 def pdf_printing(toolkit):
-    if toolkit in ("windows", "gtk", "android", "minwayland"):
+    if toolkit in ("windows", "gtk", "android"):
         return True
 
 

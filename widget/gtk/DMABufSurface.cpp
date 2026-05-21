@@ -8,7 +8,7 @@
 #include "DMABufDevice.h"
 #include "DMABufFormats.h"
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 #  include "nsWaylandDisplay.h"
 #endif
 
@@ -44,13 +44,18 @@
 #include "mozilla/widget/va_drmcommon.h"
 #include "mozilla/gfx/2D.h"
 #include "mozilla/gfx/FileHandleWrapper.h"
+#ifdef MOZ_LOGGING
+#  include "cairo.h"
+#endif
 #include "GLContextTypes.h"  // for GLContext, etc
 #include "GLContextEGL.h"
 #include "GLContextProvider.h"
 #include "ScopedGLHelpers.h"
 #include "GLBlitHelper.h"
 #include "GLReadTexImageHelper.h"
-#include "nsGtkUtils.h"
+#ifdef MOZ_WIDGET_GTK
+#  include "nsGtkUtils.h"
+#endif
 #include "ImageContainer.h"
 #include "mozilla/layers/LayersSurfaces.h"
 #include "mozilla/ScopeExit.h"
@@ -1138,7 +1143,7 @@ void DMABufSurfaceRGBA::ReleaseSurface() {
   ReleaseDMABuf();
 }
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 wl_buffer* DMABufSurfaceRGBA::CreateWlBuffer() {
   nsWaylandDisplay* waylandDisplay = widget::WaylandDisplayGet();
   auto* dmabuf = waylandDisplay->GetDmabuf();
@@ -1284,6 +1289,7 @@ nsresult DMABufSurface::BuildSurfaceDescriptorBuffer(
 
 #ifdef MOZ_LOGGING
 void DMABufSurfaceRGBA::DumpToFile(const char* pFile) {
+#  if CAIRO_HAS_PNG_FUNCTIONS
   uint32_t stride;
 
   if (!MapReadOnly(&stride)) {
@@ -1304,6 +1310,7 @@ void DMABufSurfaceRGBA::DumpToFile(const char* pFile) {
   if (cairo_surface_status(surface) == CAIRO_STATUS_SUCCESS) {
     cairo_surface_write_to_png(surface, pFile);
   }
+#  endif
 }
 #endif
 
@@ -2164,7 +2171,7 @@ void DMABufSurfaceYUV::CopyPlane(int aPlane, char* aData) {
 }
 #endif
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 wl_buffer* DMABufSurfaceYUV::CreateWlBuffer() {
   nsWaylandDisplay* waylandDisplay = widget::WaylandDisplayGet();
   auto* dmabuf = waylandDisplay->GetDmabuf();

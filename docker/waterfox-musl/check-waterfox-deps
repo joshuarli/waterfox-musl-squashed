@@ -12,8 +12,11 @@ needed_report=${WFX_WATERFOX_NEEDED_REPORT:-$cache/dist/waterfox-final.needed.tx
 allow_alsa=${WFX_WATERFOX_ALLOW_ALSA:-0}
 allow_gtk=${WFX_WATERFOX_ALLOW_GTK:-0}
 hermetic=${WFX_WATERFOX_HERMETIC:-0}
+allow_hardware=${WFX_WATERFOX_ALLOW_HARDWARE:-0}
+hardware_allowed=${WFX_WATERFOX_HARDWARE_ALLOWED_NEEDED:-$repo_root/docker/waterfox-musl/waterfox-minwayland-hardware-allowed-needed.txt}
+hardware_driver_regex=${WFX_WATERFOX_HARDWARE_DRIVER_REGEX:-'^virtio_gpu_dri\.so$'}
 hermetic_baseline_regex=${WFX_WATERFOX_HERMETIC_BASELINE_REGEX:-'^libc\.musl-.*\.so\.1$'}
-deny_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libmimalloc\.so'
+deny_regex='libX11|libX11-xcb|libxcb|libxcb-shm|libxcb-composite|libxcb-dri3|libxcb-ewmh|libxcb-icccm|libxcb-present|libxcb-randr|libxcb-render|libxcb-shape|libxcb-shm|libxcb-sync|libxcb-xfixes|libXcomposite|libXdamage|libXext|libXfixes|libXi|libXinerama|libXrandr|libXrender|libXcursor|libxkbfile|libXt|libSM|libICE|libGLX|libGL\.so|libvulkan|libpipewire|libpulse|libdbus|libnotify|libsecret|libspeechd|libcups|libhunspell|libmimalloc\.so'
 
 if [ "$allow_alsa" != 1 ]; then
   deny_regex=$deny_regex'|libasound'
@@ -35,12 +38,27 @@ tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT
 actual=$tmp_dir/actual.txt
 expected=$tmp_dir/expected.txt
+optional=$tmp_dir/optional.txt
+allowed_union=$tmp_dir/allowed-union.txt
 providers=$tmp_dir/providers.txt
+hermetic_allowed=$tmp_dir/hermetic-allowed.txt
 unexpected=$tmp_dir/unexpected.txt
 missing=$tmp_dir/missing.txt
 unresolved=$tmp_dir/unresolved.txt
 
 sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; s/[[:space:]]//g; p' "$allowed" | sort -u > "$expected"
+: > "$optional"
+case "$allow_hardware" in
+  1)
+    [ -f "$hardware_allowed" ] || fail "missing hardware dependency list $hardware_allowed"
+    sed -n '/^[[:space:]]*#/d; /^[[:space:]]*$/d; s/[[:space:]]//g; p' "$hardware_allowed" | sort -u > "$optional"
+    ;;
+  0)
+    ;;
+  *)
+    fail "unknown WFX_WATERFOX_ALLOW_HARDWARE=$allow_hardware; expected 0 or 1"
+    ;;
+esac
 : > "$actual"
 : > "$providers"
 : > "$report"
@@ -72,6 +90,14 @@ while IFS= read -r -d '' file; do
       ;;
   esac
 
+  case "$rel" in
+    */dri/*_dri.so|*/dri/*_drv_video.so)
+      if [ "$allow_hardware" != 1 ] || ! [[ "$base" =~ $hardware_driver_regex ]]; then
+        printf 'rejected Mesa/VA driver in %s\n' "$rel" >> "$reject_report"
+      fi
+      ;;
+  esac
+
   if "$readelf" -d "$file" 2>/dev/null | grep -E "$deny_regex" >> "$reject_report"; then
     printf 'rejected dependency in %s\n' "$rel" >> "$reject_report"
   fi
@@ -89,8 +115,9 @@ if [ "$allow_alsa" = 1 ] && grep -Eq '^libasound\.so' "$actual"; then
   grep -E '^libasound\.so' "$actual" >> "$expected"
   sort -u "$expected" -o "$expected"
 fi
+cat "$expected" "$optional" | sort -u > "$allowed_union"
 cp "$actual" "$needed_report"
-comm -23 "$actual" "$expected" > "$unexpected"
+comm -23 "$actual" "$allowed_union" > "$unexpected"
 comm -13 "$actual" "$expected" > "$missing"
 
 if [ -s "$unexpected" ]; then
@@ -109,11 +136,12 @@ fi
 
 case "$hermetic" in
   1)
+    cat "$providers" "$optional" | sort -u > "$hermetic_allowed"
     awk -v baseline="$hermetic_baseline_regex" '
       NR == FNR { providers[$0] = 1; next }
       $0 ~ baseline { next }
       !($0 in providers) { print }
-    ' "$providers" "$actual" > "$unresolved"
+    ' "$hermetic_allowed" "$actual" > "$unresolved"
     if [ -s "$unresolved" ]; then
       {
         printf 'non-hermetic NEEDED libraries:\n'

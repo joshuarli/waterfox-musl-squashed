@@ -20,7 +20,7 @@ struct AVCodecParserContext;
 struct PRLibrary;
 struct AVChannelLayout;
 struct AVCodecHWConfig;
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
 struct AVVAAPIHWConfig;
 struct AVHWFramesConstraints;
 #endif
@@ -52,7 +52,7 @@ struct MOZ_ONLY_USED_TO_AVOID_STATIC_CONSTRUCTORS FFmpegLibWrapper {
   // Reset the wrapper and unlink all attached libraries.
   void Unlink();
 
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
   // Check if libva and libva-drm are available and we can use HW decode.
   bool IsVAAPIAvailable();
 #endif
@@ -168,7 +168,7 @@ struct MOZ_ONLY_USED_TO_AVOID_STATIC_CONSTRUCTORS FFmpegLibWrapper {
   AVBufferRef* (*av_buffer_ref)(AVBufferRef* buf);
   void (*av_buffer_unref)(AVBufferRef** buf);
 
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
   AVVAAPIHWConfig* (*av_hwdevice_hwconfig_alloc)(AVBufferRef* device_ctx);
   AVHWFramesConstraints* (*av_hwdevice_get_hwframe_constraints)(
       AVBufferRef* ref, const void* hwconfig);

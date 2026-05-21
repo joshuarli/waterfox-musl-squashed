@@ -11,7 +11,7 @@
 
 #include "DMABufDevice.h"
 #include "DMABufFormats.h"
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 #  include "nsWaylandDisplay.h"
 #  include "WidgetUtilsGtk.h"
 #  include "mozilla/widget/mozwayland.h"
@@ -79,7 +79,7 @@ class DMABufFormatTable final {
 
 class DMABufFeedbackTranche final {
  public:
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   void SetFormats(DMABufFormatTable* aFormatTable, wl_array* aIndices) {
     // Formats are reported as array with appropriate modifiers.
     // Modifiers are sorted from the most preffered.
@@ -192,7 +192,7 @@ void DMABufFormats::PendingDMABufFeedbackDone() {
   }
 }
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 static void dmabuf_feedback_format_table(
     void* data,
     struct zwp_linux_dmabuf_feedback_v1* zwp_linux_dmabuf_feedback_v1,
@@ -373,14 +373,14 @@ void DMABufFormats::EnsureBasicFormats() {
 DMABufFormats::DMABufFormats() {}
 
 DMABufFormats::~DMABufFormats() {
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   if (mWaylandFeedback) {
     zwp_linux_dmabuf_feedback_v1_destroy(mWaylandFeedback);
   }
 #endif
 }
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 RefPtr<DMABufFormats> CreateDMABufFeedbackFormats(
     wl_surface* aSurface, const DMABufFormatsCallback& aFormatRefreshCB) {
   if (!WaylandDisplayGet()->HasDMABufFeedback()) {
@@ -395,7 +395,7 @@ RefPtr<DMABufFormats> CreateDMABufFeedbackFormats(
 
 void GlobalDMABufFormats::SetModifiersToGfxVars() {
   RefPtr<DMABufFormats> formats;
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   if (GdkIsWaylandDisplay()) {
     formats = WaylandDisplayGet()->GetDMABufFormats();
   }

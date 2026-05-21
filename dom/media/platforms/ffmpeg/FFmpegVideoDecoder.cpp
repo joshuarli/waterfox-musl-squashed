@@ -26,7 +26,7 @@
 #  include "H264.h"
 #  include "H265.h"
 #endif
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 #  include "mozilla/gfx/gfxVars.h"
 #  include "mozilla/layers/DMABUFSurfaceImage.h"
 #  include "FFmpegVideoFramePool.h"
@@ -90,7 +90,7 @@ typedef mozilla::layers::PlanarYCbCrImage PlanarYCbCrImage;
 
 namespace mozilla {
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 MOZ_RUNINIT nsTArray<AVCodecID>
     FFmpegVideoDecoder<LIBAV_VER>::mAcceleratedFormats;
 #endif
@@ -212,7 +212,7 @@ static AVPixelFormat ChooseD3D11VAPixelFormat(AVCodecContext* aCodecContext,
 }
 #endif
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 AVCodec* FFmpegVideoDecoder<LIBAV_VER>::FindVAAPICodec() {
   AVCodec* decoder = FindHardwareAVCodec(mLib, mCodecID);
   if (!decoder) {
@@ -499,7 +499,7 @@ void FFmpegVideoDecoder<LIBAV_VER>::PtsCorrectionContext::Reset() {
 }
 #endif
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 bool FFmpegVideoDecoder<LIBAV_VER>::ShouldEnableLinuxHWDecoding() const {
   bool supported = false;
   switch (mCodecID) {
@@ -542,7 +542,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::ShouldEnableLinuxHWDecoding() const {
 }
 #endif
 
-#if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
+#if defined(MOZ_ENABLE_VAAPI) && defined(MOZ_USE_HWDECODE)
 bool FFmpegVideoDecoder<LIBAV_VER>::UploadSWDecodeToDMABuf() const {
   // Use direct DMABuf upload for GL backend Wayland compositor only.
   return mImageAllocator && (mImageAllocator->GetCompositorBackendType() ==
@@ -561,12 +561,12 @@ FFmpegVideoDecoder<LIBAV_VER>::FFmpegVideoDecoder(
     : FFmpegDataDecoder(aLib, GetCodecId(aConfig.mMimeType)),
       mImageAllocator(aAllocator),
 #ifdef MOZ_USE_HWDECODE
-#  ifdef MOZ_WIDGET_GTK
+#  ifdef MOZ_ENABLE_VAAPI
       mHardwareDecodingDisabled(aDisableHardwareDecoding ||
                                 !ShouldEnableLinuxHWDecoding()),
 #  else
       mHardwareDecodingDisabled(aDisableHardwareDecoding),
-#  endif  // MOZ_WIDGET_GTK
+#  endif  // MOZ_ENABLE_VAAPI
 #endif    // MOZ_USE_HWDECODE
       mImageContainer(aImageContainer),
       mInfo(aConfig),
@@ -578,7 +578,7 @@ FFmpegVideoDecoder<LIBAV_VER>::FFmpegVideoDecoder(
   // initialization.
   mExtraData = new MediaByteBuffer;
   mExtraData->AppendElements(*aConfig.mExtraData);
-#if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
+#if defined(MOZ_ENABLE_VAAPI) && defined(MOZ_USE_HWDECODE)
   mUploadSWDecodeToDMABuf = UploadSWDecodeToDMABuf();
 #endif
 #ifdef MOZ_USE_HWDECODE
@@ -707,7 +707,7 @@ static bool IsYUV420Sampling(const AVPixelFormat& aFormat) {
          aFormat == AV_PIX_FMT_YUV420P10LE || aFormat == AV_PIX_FMT_YUV420P12LE;
 }
 
-#  if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
+#  if defined(MOZ_ENABLE_VAAPI) && defined(MOZ_USE_HWDECODE)
 bool FFmpegVideoDecoder<LIBAV_VER>::IsLinuxHDR() const {
   if (!mInfo.mColorPrimaries || !mInfo.mTransferFunction) {
     return false;
@@ -826,7 +826,7 @@ int FFmpegVideoDecoder<LIBAV_VER>::GetVideoBuffer(
     return AVERROR(EINVAL);
   }
 
-#  if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
+#  if defined(MOZ_ENABLE_VAAPI) && defined(MOZ_USE_HWDECODE)
   if (mUploadSWDecodeToDMABuf) {
     FFMPEG_LOG("DMABuf upload doesn't use shm buffers");
     return AVERROR(EINVAL);
@@ -1172,7 +1172,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
       return MediaResult(NS_ERROR_OUT_OF_MEMORY, __func__);
     }
 
-#  if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#  if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
     // Release unused VA-API surfaces before avcodec_receive_frame() as
     // ffmpeg recycles VASurface for HW decoding.
     if (mVideoFramePool) {
@@ -1208,7 +1208,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::DoDecode(
     MediaResult rv;
 #  ifdef MOZ_USE_HWDECODE
     if (IsHardwareAccelerated()) {
-#    ifdef MOZ_WIDGET_GTK
+#    ifdef MOZ_ENABLE_VAAPI
       if (mDecodeStats.IsDecodingSlow() &&
           !StaticPrefs::media_ffmpeg_disable_software_fallback()) {
         PROFILER_MARKER_TEXT("FFmpegVideoDecoder::DoDecode", MEDIA_PLAYBACK, {},
@@ -1591,7 +1591,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImage(
         IsKeyFrame(mFrame), TimeUnit::FromMicroseconds(-1));
   }
 #endif
-#if defined(MOZ_WIDGET_GTK) && defined(MOZ_USE_HWDECODE)
+#if defined(MOZ_ENABLE_VAAPI) && defined(MOZ_USE_HWDECODE)
   if (mUploadSWDecodeToDMABuf) {
     MOZ_DIAGNOSTIC_ASSERT(!v);
     if (!mVideoFramePool) {
@@ -1642,7 +1642,7 @@ MediaResult FFmpegVideoDecoder<LIBAV_VER>::CreateImage(
   return NS_OK;
 }
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 bool FFmpegVideoDecoder<LIBAV_VER>::GetVAAPISurfaceDescriptor(
     VADRMPRIMESurfaceDescriptor* aVaDesc) {
   VASurfaceID surface_id = (VASurfaceID)(uintptr_t)mFrame->data[3];
@@ -1770,7 +1770,7 @@ FFmpegVideoDecoder<LIBAV_VER>::ProcessFlush() {
   mPtsContext.Reset();
   mDurationMap.Clear();
 #endif
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
   if (mVideoFramePool) {
     mVideoFramePool->FlushFFmpegFrames();
   }
@@ -1818,7 +1818,7 @@ AVCodecID FFmpegVideoDecoder<LIBAV_VER>::GetCodecId(
 
 void FFmpegVideoDecoder<LIBAV_VER>::ProcessShutdown() {
   MOZ_ASSERT(mTaskQueue->IsOnCurrentThread());
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
   mVideoFramePool = nullptr;
   if (IsHardwareAccelerated()) {
     mLib->av_buffer_unref(&mVAAPIDeviceContext);
@@ -1840,7 +1840,7 @@ void FFmpegVideoDecoder<LIBAV_VER>::ProcessShutdown() {
 
 bool FFmpegVideoDecoder<LIBAV_VER>::IsHardwareAccelerated(
     nsACString& aFailureReason) const {
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
   return mUsingV4L2 || !!mVAAPIDeviceContext;
 #elif defined(MOZ_ENABLE_D3D11VA)
   return !!mD3D11VADeviceContext;
@@ -1849,7 +1849,7 @@ bool FFmpegVideoDecoder<LIBAV_VER>::IsHardwareAccelerated(
 #endif
 }
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 bool FFmpegVideoDecoder<LIBAV_VER>::IsFormatAccelerated(
     AVCodecID aCodecID) const {
   for (const auto& format : mAcceleratedFormats) {

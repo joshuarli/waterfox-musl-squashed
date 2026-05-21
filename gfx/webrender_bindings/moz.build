@@ -89,7 +89,9 @@ if CONFIG["MOZ_WIDGET_TOOLKIT"] == "windows":
         "RenderDcompSurfaceTextureHost.cpp",
     ]
 
-if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
+if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk" or (
+    CONFIG["MOZ_WIDGET_TOOLKIT"] == "minwayland" and CONFIG["MOZ_ENABLE_VAAPI"]
+):
     EXPORTS.mozilla.webrender += [
         "RenderDMABUFTextureHost.h",
     ]

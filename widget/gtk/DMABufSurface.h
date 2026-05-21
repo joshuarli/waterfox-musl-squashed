@@ -209,7 +209,7 @@ class DMABufSurface {
   virtual void DumpToFile(const char* pFile) {};
 #endif
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   // Create wl_buffer over DMABuf surface, ownership is transfered to caller.
   // If underlying DMABuf surface is deleted before wl_buffer destroy,
   // behaviour is undefined and may lead to rendering artifacts as
@@ -349,7 +349,7 @@ class DMABufSurfaceRGBA final : public DMABufSurface {
   GLuint GetTexture(int aPlane = 0) override { return mTexture; };
   EGLImageKHR GetEGLImage(int aPlane = 0) override { return mEGLImage; };
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   wl_buffer* CreateWlBuffer() override;
 #endif
 
@@ -457,7 +457,7 @@ class DMABufSurfaceYUV final : public DMABufSurface {
                      mozilla::gfx::SurfaceFormat aImageFormat);
   bool VerifyTextureCreation();
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   wl_buffer* CreateWlBuffer() override;
 #endif
 

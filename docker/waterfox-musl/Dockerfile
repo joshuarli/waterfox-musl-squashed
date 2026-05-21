@@ -49,7 +49,9 @@ RUN --mount=type=cache,target=/var/cache/apk \
       gperf \
       git \
       libc++-dev \
+      libdrm-dev \
       libtool \
+      libva-dev \
       libxkbcommon-dev \
       linux-headers \
       lld22 \
@@ -57,6 +59,7 @@ RUN --mount=type=cache,target=/var/cache/apk \
       m4 \
       make \
       mold \
+      mesa-dev \
       nasm \
       nodejs-current \
       patch \

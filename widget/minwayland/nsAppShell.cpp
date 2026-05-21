@@ -8,7 +8,10 @@
 #include "HeadlessScreenHelper.h"
 #include "MinWaylandDisplay.h"
 #include "mozilla/Hal.h"
+#include "mozilla/Logging.h"
 #include "mozilla/widget/ScreenManager.h"
+
+mozilla::LazyLogModule gDmabufLog("Dmabuf");
 
 using mozilla::MakeUnique;
 using mozilla::widget::MinWaylandDisplay;

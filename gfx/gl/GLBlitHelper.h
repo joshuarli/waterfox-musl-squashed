@@ -46,7 +46,7 @@ class MacIOSurface;
 #  include "mozilla/java/GeckoSurfaceTextureWrappers.h"
 #endif
 
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
 class DMABufSurface;
 #endif
 
@@ -75,7 +75,7 @@ class SurfaceTextureDescriptor;
 class MacIOSurfaceImage;
 #endif
 
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
 class DMABUFSurfaceImage;
 #endif
 }  // namespace layers
@@ -245,7 +245,7 @@ class GLBlitHelper final {
   bool BlitImage(layers::MacIOSurfaceImage* srcImage,
                  const gfx::IntSize& destSize, OriginPos destOrigin) const;
 #endif
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
   bool Blit(DMABufSurface* surface, const gfx::IntSize& destSize,
             OriginPos destOrigin) const;
   bool BlitImage(layers::DMABUFSurfaceImage* srcImage,

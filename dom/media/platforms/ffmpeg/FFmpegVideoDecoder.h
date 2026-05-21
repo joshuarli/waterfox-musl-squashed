@@ -19,7 +19,7 @@
 #if LIBAVCODEC_VERSION_MAJOR >= 57 && LIBAVUTIL_VERSION_MAJOR >= 56
 #  include "mozilla/layers/TextureClient.h"
 #endif
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
 #  include "FFmpegVideoFramePool.h"
 #endif
 #include "libavutil/pixfmt.h"
@@ -171,7 +171,7 @@ class FFmpegVideoDecoder<LIBAV_VER>
   std::atomic<uint8_t> mNumOfHWTexturesInUse{0};
 #endif
 
-#if defined(MOZ_USE_HWDECODE) && defined(MOZ_WIDGET_GTK)
+#if defined(MOZ_USE_HWDECODE) && defined(MOZ_ENABLE_VAAPI)
   bool ShouldEnableLinuxHWDecoding() const;
   bool UploadSWDecodeToDMABuf() const;
   bool IsLinuxHDR() const;

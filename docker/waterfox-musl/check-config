@@ -8,6 +8,8 @@ compile_commands=$objdir/clangd/compile_commands.json
 mode=${WFX_CONFIG_MODE:-debug}
 expect_webdriver=${WFX_CONFIG_WEBDRIVER:-0}
 expect_widget_toolkit=${WFX_CONFIG_WIDGET_TOOLKIT:-}
+expect_vaapi=${WFX_CONFIG_VAAPI:-0}
+expect_gl_provider=${WFX_CONFIG_GL_PROVIDER:-}
 expect_mimalloc_prefix=${WFX_CONFIG_MIMALLOC_PREFIX:-/opt/wfx/build-deps/mimalloc}
 expect_static_gcc_runtime=${WFX_EXPECT_STATIC_GCC_RUNTIME:-0}
 expect_static_font_stack=${WFX_EXPECT_STATIC_FONT_STACK:-0}
@@ -74,6 +76,11 @@ require_config MOZ_LIBCLANG_PATH /usr/lib/llvm22/lib
 
 if [ -n "$expect_widget_toolkit" ]; then
   require_config MOZ_WIDGET_TOOLKIT "$expect_widget_toolkit"
+fi
+
+if [ -n "$expect_gl_provider" ]; then
+  require_config MOZ_GL_DEFAULT_PROVIDER "$expect_gl_provider"
+  reject_config_key MOZ_GL_PROVIDER
 fi
 
 if [ "${WFX_EXPECT_FOLD_LIBS:-0}" = 1 ]; then
@@ -154,14 +161,34 @@ reject_config_key MOZ_ZIPWRITER
 reject_config_key MOZ_WEBRTC
 reject_config_key MOZ_PULSEAUDIO
 reject_config_key MOZ_SYSTEM_PIPEWIRE
-reject_config_key MOZ_ENABLE_VAAPI
 reject_config_key MOZ_ENABLE_V4L2
 reject_config_key MOZ_SYNTH_SPEECHD
 reject_config_key MOZ_WEBMIDI_MIDIR_IMPL
+reject_config_key MOZ_WASM_SANDBOXING_HUNSPELL
+reject_config_key MOZ_SYSTEM_HUNSPELL
+reject_config_key MOZ_CHROME_MULTILOCALE
+reject_config_key NS_PRINTING
 reject_config_key RELRHACK
 reject_config_key USE_ELF_HACK
 
+if [ "$expect_widget_toolkit" = minwayland ]; then
+  reject_config_key MOZ_PDF_PRINTING
+fi
+
 require_config_empty MOZ_WATERFOX_BLOCKER
+
+case "$expect_vaapi" in
+  1)
+    require_config MOZ_ENABLE_VAAPI 1
+    require_config MOZ_FFMPEG 1
+    ;;
+  0)
+    reject_config_key MOZ_ENABLE_VAAPI
+    ;;
+  *)
+    fail "unknown WFX_CONFIG_VAAPI=$expect_vaapi; expected 0 or 1"
+    ;;
+esac
 
 case "$expect_webdriver" in
   1)

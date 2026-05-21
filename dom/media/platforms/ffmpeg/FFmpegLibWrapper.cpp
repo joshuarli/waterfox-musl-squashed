@@ -11,7 +11,7 @@
 #include "mozilla/Types.h"
 #include "PlatformDecoderModule.h"
 #include "prlink.h"
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
 #  include "mozilla/gfx/gfxVars.h"
 #  include "mozilla/widget/DMABufDevice.h"
 #  include "VALibWrapper.h"
@@ -291,7 +291,7 @@ FFmpegLibWrapper::LinkResult FFmpegLibWrapper::Link() {
                             AV_FUNC_AVUTIL_60 | AV_FUNC_AVUTIL_61 |
                             AV_FUNC_AVUTIL_62)
 
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
   AV_FUNC_OPTION_SILENT(av_hwdevice_hwconfig_alloc, AV_FUNC_58 | AV_FUNC_59 |
                                                         AV_FUNC_60 |
                                                         AV_FUNC_61 | AV_FUNC_62)
@@ -361,7 +361,7 @@ void FFmpegLibWrapper::Unlink() {
   PodZero(this);
 }
 
-#ifdef MOZ_WIDGET_GTK
+#ifdef MOZ_ENABLE_VAAPI
 bool FFmpegLibWrapper::IsVAAPIAvailable() {
 #  define VA_FUNC_LOADED(func) ((func) != nullptr)
   return VA_FUNC_LOADED(avcodec_get_hw_config) &&

@@ -85,17 +85,20 @@ if CONFIG["MOZ_WIDGET_TOOLKIT"] == "android":
         "gfxFT2FontBase.h",
         "gfxFT2Fonts.h",
     ]
-    EXPORTS.mozilla.gfx += [
-        "PrintTargetPDF.h",
-    ]
     SOURCES += [
         "gfxAndroidPlatform.cpp",
         "gfxFT2FontBase.cpp",
         "gfxFT2FontList.cpp",
         "gfxFT2Fonts.cpp",
         "gfxFT2Utils.cpp",
-        "PrintTargetPDF.cpp",
     ]
+    if CONFIG["MOZ_PDF_PRINTING"]:
+        EXPORTS.mozilla.gfx += [
+            "PrintTargetPDF.h",
+        ]
+        SOURCES += [
+            "PrintTargetPDF.cpp",
+        ]
     UNIFIED_SOURCES += [
         "AndroidSystemFontIterator.cpp",
     ]
@@ -134,15 +137,18 @@ elif CONFIG["MOZ_WIDGET_TOOLKIT"] in ("gtk", "minwayland"):
         EXPORTS += [
             "gfxPlatformMinWayland.h",
         ]
-    EXPORTS.mozilla.gfx += [
-        "PrintTargetPDF.h",
-    ]
     SOURCES += [
         "gfxFcPlatformFontList.cpp",
         "gfxFT2FontBase.cpp",
         "gfxFT2Utils.cpp",
-        "PrintTargetPDF.cpp",
     ]
+    if CONFIG["MOZ_PDF_PRINTING"]:
+        EXPORTS.mozilla.gfx += [
+            "PrintTargetPDF.h",
+        ]
+        SOURCES += [
+            "PrintTargetPDF.cpp",
+        ]
     if CONFIG["MOZ_WIDGET_TOOLKIT"] == "gtk":
         SOURCES += [
             "gfxPlatformGtk.cpp",
@@ -175,9 +181,12 @@ elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "windows":
         "gfxWindowsSurface.h",
     ]
     EXPORTS.mozilla.gfx += [
-        "PrintTargetPDF.h",
         "PrintTargetWindows.h",
     ]
+    if CONFIG["MOZ_PDF_PRINTING"]:
+        EXPORTS.mozilla.gfx += [
+            "PrintTargetPDF.h",
+        ]
     SOURCES += [
         "DisplayConfigWindows.cpp",
         "gfxDWriteCommon.cpp",
@@ -187,9 +196,12 @@ elif CONFIG["MOZ_WIDGET_TOOLKIT"] == "windows":
         "gfxWindowsNativeDrawing.cpp",
         "gfxWindowsPlatform.cpp",
         "gfxWindowsSurface.cpp",
-        "PrintTargetPDF.cpp",
         "PrintTargetWindows.cpp",
     ]
+    if CONFIG["MOZ_PDF_PRINTING"]:
+        SOURCES += [
+            "PrintTargetPDF.cpp",
+        ]
     UNIFIED_SOURCES += [
         "gfxDWriteFontList.cpp",
     ]

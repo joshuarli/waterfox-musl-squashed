@@ -10,7 +10,7 @@
 
 #include "nsTArray.h"
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 struct zwp_linux_dmabuf_v1;
 struct zwp_linux_dmabuf_feedback_v1;
 struct wl_surface;
@@ -73,7 +73,7 @@ class DMABufFormats final {
  public:
   NS_INLINE_DECL_THREADSAFE_REFCOUNTING(DMABufFormats)
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   void InitFeedback(zwp_linux_dmabuf_v1* aDMABuf,
                     const DMABufFormatsCallback& aFormatRefreshCB,
                     wl_surface* aSurface = nullptr);
@@ -94,14 +94,14 @@ class DMABufFormats final {
   ~DMABufFormats();
 
   DMABufFormatsCallback mFormatRefreshCallback;
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
   zwp_linux_dmabuf_feedback_v1* mWaylandFeedback = nullptr;
 #endif
   UniquePtr<DMABufFeedback> mDMABufFeedback;
   UniquePtr<DMABufFeedback> mPendingDMABufFeedback;
 };
 
-#ifdef MOZ_WAYLAND
+#if defined(MOZ_WIDGET_GTK) && defined(MOZ_WAYLAND)
 RefPtr<DMABufFormats> CreateDMABufFeedbackFormats(
     wl_surface* aSurface,
     const std::function<void(DMABufFormats*)>& aFormatRefreshCB = nullptr);

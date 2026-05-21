@@ -7,14 +7,29 @@
 with Files("**"):
     BUG_COMPONENT = ("Core", "Widget")
 
+DIRS += [
+    "/third_party/gbm/gbm/",
+    "/third_party/gbm/libgbm",
+]
+
 EXPORTS += [
     "nsLookAndFeel.h",
     "nsWidgetFactory.h",
 ]
 
 EXPORTS.mozilla.widget += [
+    "../gtk/DMABufDevice.h",
+    "../gtk/DMABufFormats.h",
+    "../gtk/DMABufSurface.h",
+    "../gtk/va_drmcommon.h",
     "GfxInfo.h",
     "wayland/xdg-shell-client-protocol.h",
+]
+
+SOURCES += [
+    "../gtk/DMABufDevice.cpp",
+    "../gtk/DMABufFormats.cpp",
+    "../gtk/DMABufSurface.cpp",
 ]
 
 UNIFIED_SOURCES += [
@@ -44,8 +59,20 @@ include("/ipc/chromium/chromium-config.mozbuild")
 FINAL_LIBRARY = "xul"
 
 LOCAL_INCLUDES += [
+    "/gfx/cairo/cairo/src",
+    "/layout/base",
+    "/layout/generic",
+    "/third_party/gbm/gbm/",
     "/widget",
+    "/widget/gtk",
     "/widget/headless",
 ]
 
 CXXFLAGS += CONFIG["MOZ_WAYLAND_CFLAGS"]
+CXXFLAGS += CONFIG["MOZ_LIBDRM_CFLAGS"]
+if not CONFIG["MOZ_SYSTEM_LIBDRM"]:
+    LOCAL_INCLUDES += [
+        "/third_party/drm/drm/",
+        "/third_party/drm/drm/include",
+        "/third_party/drm/drm/include/libdrm",
+    ]
