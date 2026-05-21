@@ -71,12 +71,14 @@ jobs:
         run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi-minwayland-release-x64
 
       - name: Verify xz artifact
+        id: artifact
         shell: bash
         run: |
           artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland-release-x64.tar.xz' | sort | tail -n 1)"
           test -n "$artifact"
           file "$artifact" | grep -qi 'XZ compressed data'
           tar -tJf "$artifact" >/dev/null
+          echo "path=$artifact" >> "$GITHUB_OUTPUT"
 
       - name: Upload Waterfox musl minwayland tarball
         uses: actions/upload-artifact@v7
@@ -166,12 +168,14 @@ jobs:
         run: docker/waterfox-musl/wfx-musl smoke-webdriver-bidi-minwayland-release-arm64
 
       - name: Verify xz artifact
+        id: artifact
         shell: bash
         run: |
           artifact="$(find .wfx-cache/dist -maxdepth 1 -type f -name 'waterfox-*.stage1-minwayland-release-arm64.tar.xz' | sort | tail -n 1)"
           test -n "$artifact"
           file "$artifact" | grep -qi 'XZ compressed data'
           tar -tJf "$artifact" >/dev/null
+          echo "path=$artifact" >> "$GITHUB_OUTPUT"
 
       - name: Upload Waterfox musl minwayland tarball
         uses: actions/upload-artifact@v7
@@ -193,3 +197,57 @@ jobs:
             .wfx-cache/dist/waterfox-*.rejected-deps.txt
             .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.txt
             .wfx-cache/dist/waterfox-*.webdriver-bidi-smoke.log
+
+  publish-prerelease:
+    name: Publish GitHub prerelease
+    runs-on: ubuntu-24.04
+    needs:
+      - build-minwayland-release-x64
+      - build-minwayland-release-arm64
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download Waterfox musl minwayland tarballs
+        uses: actions/download-artifact@v7
+        with:
+          pattern: waterfox-musl-minwayland-*-tarball
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create prerelease and upload tarballs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          version="$(tr -d '[:space:]' < browser/config/version_display.txt)"
+          tag="waterfox-${version}-musl-minwayland-${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          title="Waterfox ${version} musl minwayland ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+
+          mapfile -t artifacts < <(find release-assets -type f -name 'waterfox-*.stage1-minwayland-release-*.tar.xz' | sort)
+          if [ "${#artifacts[@]}" -ne 2 ]; then
+            printf 'expected 2 release tarballs, found %s\n' "${#artifacts[@]}" >&2
+            exit 1
+          fi
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --draft=false \
+              --prerelease=true
+          else
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --title "$title" \
+              --prerelease \
+              --generate-notes
+          fi
+
+          gh release upload "$tag" "${artifacts[@]}" --clobber
