@@ -79,11 +79,12 @@ jobs:
           file "$artifact" | grep -qi 'XZ compressed data'
           tar -tJf "$artifact" >/dev/null
           echo "path=$artifact" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$artifact")" >> "$GITHUB_OUTPUT"
 
       - name: Upload Waterfox musl minwayland tarball
         uses: actions/upload-artifact@v7
         with:
-          name: waterfox-musl-minwayland-x64-tarball
+          name: ${{ steps.artifact.outputs.name }}
           if-no-files-found: error
           path: .wfx-cache/dist/waterfox-*.stage1-minwayland-release-x64.tar.xz
 
@@ -175,11 +176,12 @@ jobs:
           file "$artifact" | grep -qi 'XZ compressed data'
           tar -tJf "$artifact" >/dev/null
           echo "path=$artifact" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "$artifact")" >> "$GITHUB_OUTPUT"
 
       - name: Upload Waterfox musl minwayland tarball
         uses: actions/upload-artifact@v7
         with:
-          name: waterfox-musl-minwayland-arm64-tarball
+          name: ${{ steps.artifact.outputs.name }}
           if-no-files-found: error
           path: .wfx-cache/dist/waterfox-*.stage1-minwayland-release-arm64.tar.xz
 
@@ -210,11 +212,46 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Download Waterfox musl minwayland tarballs
-        uses: actions/download-artifact@v7
-        with:
-          pattern: waterfox-musl-minwayland-*-tarball
-          path: release-assets
-          merge-multiple: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          mkdir -p release-assets
+          while IFS=$'\t' read -r name url; do
+            case "$name" in
+              waterfox-*.stage1-minwayland-release-*.tar.xz) ;;
+              *) continue ;;
+            esac
+
+            tmp="$(mktemp)"
+            curl -fsSL \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "$url" \
+              -o "$tmp"
+
+            dest="release-assets/$name"
+            if tar -tJf "$tmp" >/dev/null 2>&1; then
+              mv "$tmp" "$dest"
+            else
+              extract_dir="$(mktemp -d)"
+              unzip -q "$tmp" -d "$extract_dir"
+              found="$(find "$extract_dir" -type f -name "$name" | sort | head -n 1)"
+              test -n "$found"
+              cp "$found" "$dest"
+              rm -rf "$extract_dir" "$tmp"
+            fi
+
+            file "$dest" | grep -qi 'XZ compressed data'
+            tar -tJf "$dest" >/dev/null
+          done < <(
+            gh api "repos/${GH_REPO}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+              --paginate \
+              --jq '.artifacts[] | [.name, .archive_download_url] | @tsv'
+          )
 
       - name: Create prerelease and upload tarballs
         shell: bash
@@ -228,9 +265,15 @@ jobs:
           tag="waterfox-${version}-musl-minwayland-${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
           title="Waterfox ${version} musl minwayland ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
 
-          mapfile -t artifacts < <(find release-assets -type f -name 'waterfox-*.stage1-minwayland-release-*.tar.xz' | sort)
+          mkdir -p release-assets
+          artifacts=()
+          while IFS= read -r artifact; do
+            artifacts+=("$artifact")
+          done < <(find release-assets -type f -name 'waterfox-*.stage1-minwayland-release-*.tar.xz' | sort)
+
           if [ "${#artifacts[@]}" -ne 2 ]; then
             printf 'expected 2 release tarballs, found %s\n' "${#artifacts[@]}" >&2
+            find release-assets -maxdepth 3 -type f | sort >&2
             exit 1
           fi
 
